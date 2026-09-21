@@ -1,35 +1,46 @@
-name: Build LLMEval IPA
+name: Build MLX iOS IPA
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 支持手动点击运行
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-14 # 使用 GitHub 的 Apple Silicon macOS 环境
     steps:
-      - name: Checkout Code
+      - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-      - name: Build App
+      - name: Select Xcode Version
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Build Unsigned App
         run: |
-          xcodebuild build \
-            -project mlx-swift-examples.xcodeproj \
-            -scheme LLMEval \
-            -destination "generic/platform=iOS" \
+          cd Applications/MLXChatExample
+          xcodebuild clean build \
+            -project MLXChatExample.xcodeproj \
+            -scheme MLXChatExample \
             -configuration Release \
-            -derivedDataPath build \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
 
-      - name: Package to IPA
+      - name: Package into IPA
         run: |
-          mkdir -p Payload
-          cp -r build/Build/Products/Release-iphoneos/LLMEval.app Payload/
-          zip -qr LLMEval.ipa Payload
+          mkdir -p build/Payload
+          cp -r Applications/MLXChatExample/build/Release-iphoneos/MLXChatExample.app build/Payload/
+          cd build
+          zip -r MLXChatExample.ipa Payload
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
+        with:
+          name: MLXChatExample-IPA
+          path: build/MLXChatExample.ipa
+
         with:
           name: LLMEval-IPA
           path: LLMEval.ipa
