@@ -2,10 +2,17 @@ name: Build MLX iOS IPA
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-ios.yml"
+
+permissions:
+  contents: write
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-26
 
     steps:
       - name: Checkout repository
@@ -13,42 +20,49 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Select Xcode Version
+      - name: Show toolchain
         run: |
-          ls -d /Applications/Xcode*.app
-          sudo xcode-select -s /Applications/Xcode_15.4.app
+          xcodebuild -version
+          swift --version
 
-      - name: Build Unsigned App
+      - name: Build unsigned app
         run: |
-          xcodebuild clean build \
-            -project Applications/MLXChatExample/MLXChatExample.xcodeproj \
+          xcodebuild build \
+            -project mlx-swift-examples.xcodeproj \
             -scheme MLXChatExample \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath "$RUNNER_TEMP/MLXChatDerivedData" \
-            CODE_SIGN_IDENTITY="" \
+            -derivedDataPath "$RUNNER_TEMP/MLXDerivedData" \
+            -skipMacroValidation \
+            -skipPackagePluginValidation \
+            DISAMBIGUATOR=elysium \
+            CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGN_IDENTITY=""
 
       - name: Package into IPA
         run: |
           rm -rf build
           mkdir -p build/Payload
-
-          cp -R \
-            "$RUNNER_TEMP/MLXChatDerivedData/Build/Products/Release-iphoneos/MLXChatExample.app" \
-            build/Payload/
-
+          cp -R "$RUNNER_TEMP/MLXDerivedData/Build/Products/Release-iphoneos/MLXChatExample.app" build/Payload/
           cd build
-          zip -r MLXChatExample.ipa Payload
+          zip -qry MLXChatExample.ipa Payload
+          ls -lh MLXChatExample.ipa
 
-      - name: Upload IPA Artifact
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: MLXChatExample-IPA
           path: build/MLXChatExample.ipa
-        with:
-          name: LLMEval-IPA
-          path: LLMEval.ipa
+          retention-days: 30
 
+      - name: Publish to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete ipa-latest --yes --cleanup-tag || true
+          gh release create ipa-latest build/MLXChatExample.ipa \
+            --target "$GITHUB_SHA" \
+            --title "MLXChatExample unsigned IPA" \
+            --notes "Unsigned IPA built from commit $GITHUB_SHA. Sign with Sideloadly (free Apple ID works) before installing. Requires iOS 17+."
