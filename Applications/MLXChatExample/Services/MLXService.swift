@@ -26,6 +26,7 @@ class MLXService {
     /// Includes both language models (LLM) and vision-language models (VLM).
     static let availableModels: [LMModel] = [
         LMModel(name: "qwen3:4b", configuration: LLMRegistry.qwen3_4b_4bit, type: .llm),
+        LMModel(name: "qwen3:8b", configuration: LLMRegistry.qwen3_8b_4bit, type: .llm),
         LMModel(
             name: "qwen3.5:2b", configuration: LLMRegistry.qwen3_5_2b_4bit, type: .llm),
         LMModel(
