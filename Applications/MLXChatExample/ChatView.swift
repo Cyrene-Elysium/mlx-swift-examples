@@ -43,6 +43,7 @@ import UniformTypeIdentifiers
 
 /// Main chat interface view that manages the conversation UI and user interactions.
 /// Displays messages, handles media attachments, and provides input controls.
+/// Presented as a navigation destination for a single `ChatSession`.
 struct ChatView: View {
     /// View model that manages the chat state and business logic
     @Bindable private var vm: ChatViewModel
@@ -59,31 +60,32 @@ struct ChatView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                // Display conversation history
-                ConversationView(messages: vm.messages)
+        // Display conversation history; the prompt bar floats above it so
+        // content scrolls beneath the Liquid Glass material.
+        ConversationView(messages: vm.messages)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 8) {
+                    // Show media previews if attachments are present
+                    if !vm.mediaSelection.isEmpty {
+                        MediaPreviewsView(mediaSelection: vm.mediaSelection)
+                    }
 
-                Divider()
-
-                // Show media previews if attachments are present
-                if !vm.mediaSelection.isEmpty {
-                    MediaPreviewsView(mediaSelection: vm.mediaSelection)
+                    // Input field with send and media attachment buttons
+                    PromptField(
+                        prompt: $vm.prompt,
+                        sendButtonAction: vm.generate,
+                        // Only show media button for vision-capable models
+                        mediaButtonAction: vm.selectedModel.isVisionModel
+                            ? {
+                                vm.mediaSelection.isShowing = true
+                            } : nil
+                    )
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
                 }
-
-                // Input field with send and media attachment buttons
-                PromptField(
-                    prompt: $vm.prompt,
-                    sendButtonAction: vm.generate,
-                    // Only show media button for vision-capable models
-                    mediaButtonAction: vm.selectedModel.isVisionModel
-                        ? {
-                            vm.mediaSelection.isShowing = true
-                        } : nil
-                )
-                .padding()
             }
-            .navigationTitle("MLX Chat")
+            .navigationTitle(vm.session.title)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ChatToolbarView(vm: vm)
             }
@@ -142,10 +144,20 @@ struct ChatView: View {
                     onCompletion: vm.addMedia
                 )
             #endif
-        }
     }
 }
 
 #Preview {
-    ChatView(viewModel: ChatViewModel(mlxService: MLXService()))
+    NavigationStack {
+        ChatView(
+            viewModel: ChatViewModel(
+                mlxService: MLXService(),
+                session: ChatSession(
+                    modelName: MLXService.availableModels.first!.name,
+                    messages: [.system("You are a helpful assistant!")]
+                ),
+                store: ChatSessionStore()
+            )
+        )
+    }
 }

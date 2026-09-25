@@ -11,26 +11,43 @@ import UniformTypeIdentifiers
 
 /// ViewModel that manages the chat interface and coordinates with MLXService for text generation.
 /// Handles user input, message history, media attachments, and generation state.
+/// The conversation lives inside a persisted `ChatSession`.
 @Observable
 @MainActor
 class ChatViewModel {
     /// Service responsible for ML model operations
     private let mlxService: MLXService
 
-    init(mlxService: MLXService) {
+    /// Store persisting sessions across launches
+    private let store: ChatSessionStore
+
+    /// The conversation this view model operates on
+    let session: ChatSession
+
+    init(mlxService: MLXService, session: ChatSession, store: ChatSessionStore) {
         self.mlxService = mlxService
+        self.store = store
+        self.session = session
+        self.selectedModel =
+            MLXService.availableModels.first { $0.name == session.modelName }
+            ?? MLXService.availableModels.first!
     }
 
     /// Current user input text
     var prompt: String = ""
 
-    /// Chat history containing system, user, and assistant messages
-    var messages: [Message] = [
-        .system("You are a helpful assistant!")
-    ]
+    /// Chat history, backed by the session
+    var messages: [Message] {
+        session.messages
+    }
 
     /// Currently selected language model for generation
-    var selectedModel: LMModel = MLXService.availableModels.first!
+    var selectedModel: LMModel {
+        didSet {
+            session.modelName = selectedModel.name
+            store.defaultModelName = selectedModel.name
+        }
+    }
 
     /// Manages image and video attachments for the current message
     var mediaSelection = MediaSelection()
@@ -67,13 +84,22 @@ class ChatViewModel {
 
         isGenerating = true
 
+        // Auto-title the session from the first real user message
+        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if session.title == ChatSession.defaultTitle, !trimmedPrompt.isEmpty {
+            session.title = String(trimmedPrompt.prefix(32))
+        }
+
         // Add user message with any media attachments
-        messages.append(.user(prompt, images: mediaSelection.images, videos: mediaSelection.videos))
+        session.messages.append(
+            .user(prompt, images: mediaSelection.images, videos: mediaSelection.videos))
         // Add empty assistant message that will be filled during generation
-        messages.append(.assistant(""))
+        session.messages.append(.assistant(""))
 
         // Clear the input after sending
         clear(.prompt)
+
+        store.save(session)
 
         generateTask = Task {
             // Process generation chunks and update UI
@@ -83,13 +109,13 @@ class ChatViewModel {
                 switch generation {
                 case .chunk(let chunk):
                     // Append new text to the current assistant message
-                    if let assistantMessage = messages.last {
+                    if let assistantMessage = session.messages.last {
                         assistantMessage.content += chunk
                     }
                 case .info(let info):
                     // Update performance metrics
                     generateCompletionInfo = info
-                case .toolCall(let call):
+                case .toolCall:
                     break
                 }
             }
@@ -104,7 +130,7 @@ class ChatViewModel {
                     generateTask?.cancel()
 
                     // Mark message as cancelled
-                    if let assistantMessage = messages.last {
+                    if let assistantMessage = session.messages.last {
                         assistantMessage.content += "\n[Cancelled]"
                     }
                 }
@@ -115,9 +141,13 @@ class ChatViewModel {
 
         isGenerating = false
         generateTask = nil
+
+        store.save(session)
     }
 
-    /// Processes and adds media attachments to the current message
+    /// Processes and adds media attachments to the current message.
+    /// Images are copied into permanent storage so they survive across launches;
+    /// videos reference the temporary file for the current session only.
     func addMedia(_ result: Result<URL, any Error>) {
         do {
             let url = try result.get()
@@ -125,7 +155,11 @@ class ChatViewModel {
             // Determine media type and add to appropriate collection
             if let mediaType = UTType(filenameExtension: url.pathExtension) {
                 if mediaType.conforms(to: .image) {
-                    mediaSelection.images = [url]
+                    if let persisted = store.persistMedia(at: url, for: session) {
+                        mediaSelection.images = [persisted]
+                    } else {
+                        errorMessage = "Failed to save the selected image."
+                    }
                 } else if mediaType.conforms(to: .movie) {
                     mediaSelection.videos = [url]
                 }
@@ -143,8 +177,9 @@ class ChatViewModel {
         }
 
         if options.contains(.chat) {
-            messages = []
+            session.messages = []
             generateTask?.cancel()
+            store.save(session)
         }
 
         if options.contains(.meta) {

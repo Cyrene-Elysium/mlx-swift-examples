@@ -9,9 +9,11 @@ import SwiftUI
 
 @main
 struct MLXChatExampleApp: App {
+    @State private var store = ChatSessionStore()
+
     var body: some Scene {
         WindowGroup {
-            ChatView(viewModel: ChatViewModel(mlxService: MLXService()))
+            SessionListView(store: store)
         }
     }
 }

@@ -7,6 +7,7 @@
 
 import Foundation
 import HuggingFace
+import Hub
 import MLX
 import MLXHuggingFace
 import MLXLLM
@@ -18,6 +19,9 @@ import Tokenizers
 /// This class handles model loading, caching, and text generation using various LLM and VLM models.
 @Observable
 class MLXService {
+    /// Shared instance so the model cache and download state stay unified across the app.
+    static let shared = MLXService()
+
     /// List of available models that can be used for generation.
     /// Includes both language models (LLM) and vision-language models (VLM).
     static let availableModels: [LMModel] = [
@@ -28,22 +32,6 @@ class MLXService {
         LMModel(name: "qwen3:1.7b", configuration: LLMRegistry.qwen3_1_7b_4bit, type: .llm),
         LMModel(name: "qwen3:4b", configuration: LLMRegistry.qwen3_4b_4bit, type: .llm),
         LMModel(name: "qwen3:8b", configuration: LLMRegistry.qwen3_8b_4bit, type: .llm),
-        LMModel(
-            name: "r1-0528:8b",
-            configuration: ModelConfiguration(
-                id: "mlx-community/DeepSeek-R1-0528-Qwen3-8B-4bit",
-                defaultPrompt: "Tell me about the history of Spain."
-            ),
-            type: .llm
-        ),
-        LMModel(
-            name: "qwen3:4b-2507",
-            configuration: ModelConfiguration(
-                id: "mlx-community/Qwen3-4B-Instruct-2507-4bit",
-                defaultPrompt: "Why is the sky blue?"
-            ),
-            type: .llm
-        ),
         LMModel(
             name: "qwen2.5VL:3b", configuration: VLMRegistry.qwen2_5VL3BInstruct4Bit, type: .vlm),
         LMModel(name: "qwen2VL:2b", configuration: VLMRegistry.qwen2VL2BInstruct4Bit, type: .vlm),
@@ -155,5 +143,54 @@ class MLXService {
             return try MLXLMCommon.generate(
                 input: lmInput, parameters: parameters, context: context)
         }
+    }
+
+    // MARK: - Download management
+
+    /// Local directory a model downloads into, following the Hugging Face hub cache layout
+    /// (`<downloadBase>/models--<org>--<name>`).
+    @MainActor
+    static func downloadDirectory(for model: LMModel) -> URL {
+        let repo = model.configuration.id.replacingOccurrences(of: "/", with: "--")
+        return HubApi.default.downloadBase.appending(path: "models--\(repo)")
+    }
+
+    /// Whether the model's files have been downloaded to disk.
+    @MainActor
+    func isDownloaded(_ model: LMModel) -> Bool {
+        FileManager.default.fileExists(
+            atPath: Self.downloadDirectory(for: model).path)
+    }
+
+    /// Total size on disk of a downloaded model, computed off the main actor.
+    nonisolated static func directorySize(at url: URL) async -> Int64 {
+        await Task.detached(priority: .utility) { () -> Int64 in
+            guard
+                let enumerator = FileManager.default.enumerator(
+                    at: url,
+                    includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
+                    options: [.skipsHiddenFiles])
+            else { return 0 }
+
+            var total: Int64 = 0
+            for case let fileURL as URL in enumerator {
+                if
+                    let values = try? fileURL.resourceValues(
+                        forKeys: [.fileSizeKey, .isRegularFileKey]),
+                    values.isRegularFile == true,
+                    let size = values.fileSize
+                {
+                    total += Int64(size)
+                }
+            }
+            return total
+        }.value
+    }
+
+    /// Deletes a model's downloaded files from disk and evicts it from the in-memory cache.
+    @MainActor
+    func deleteDownloaded(_ model: LMModel) throws {
+        modelCache.removeObject(forKey: model.name as NSString)
+        try FileManager.default.removeItem(at: Self.downloadDirectory(for: model))
     }
 }
