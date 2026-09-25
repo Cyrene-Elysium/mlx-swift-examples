@@ -13,6 +13,9 @@ struct ChatToolbarView: View {
     /// View model containing the chat state and controls
     @Bindable var vm: ChatViewModel
 
+    /// Confirm dialog for clearing the conversation.
+    @State private var showsClearConfirmation = false
+
     var body: some View {
         // Display error message if present
         if let errorMessage = vm.errorMessage {
@@ -24,13 +27,25 @@ struct ChatToolbarView: View {
             DownloadProgressView(progress: progress)
         }
 
-        // Button to clear chat history, displays generation statistics
+        // Generation statistics (read-only display)
+        GenerationInfoView(tokensPerSecond: vm.tokensPerSecond)
+
+        // Clear chat history (explicit, with confirmation)
         Button {
-            vm.clear([.chat, .meta])
+            showsClearConfirmation = true
         } label: {
-            GenerationInfoView(
-                tokensPerSecond: vm.tokensPerSecond
-            )
+            Image(systemName: "trash")
+                .foregroundStyle(Color.secondary)
+        }
+        .confirmationDialog(
+            "清空当前对话？",
+            isPresented: $showsClearConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("清空", role: .destructive) {
+                vm.clear([.chat, .meta])
+            }
+            Button("取消", role: .cancel) {}
         }
 
         // Thinking mode toggle for models with the /think soft switch

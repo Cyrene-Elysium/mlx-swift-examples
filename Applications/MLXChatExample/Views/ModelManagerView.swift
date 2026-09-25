@@ -162,7 +162,7 @@ struct ModelManagerView: View {
         } else if model.isVisionModel {
             "视觉模型 · 未下载"
         } else {
-            "未下载"
+            "文本模型 · 未下载"
         }
     }
 

@@ -7,25 +7,12 @@
 
 import SwiftUI
 
-/// Floating toolbar icon shown while a model downloads. The popover shows a
-/// live progress bar, downloaded bytes and transfer speed.
-///
-/// The `Progress` object updates its counters continuously while files are
-/// written, but it is not `Observable` and the download callback fires only
-/// occasionally - so the values are sampled on a timer. That keeps the bar
-/// moving smoothly (instead of sitting at 0% and jumping at the end) and lets
-/// us compute the transfer speed from consecutive samples.
+/// Floating toolbar icon shown while a model downloads. Tapping it presents a
+/// popover with a live progress bar, downloaded/total bytes and transfer speed.
 struct DownloadProgressView: View {
     let progress: Progress
 
     @State private var isShowingDownload = false
-
-    /// Latest sample of `progress.completedUnitCount`.
-    @State private var sampledBytes: Int64 = 0
-    /// Bytes per second computed from the last two samples.
-    @State private var bytesPerSecond: Double = 0
-
-    private let sampleInterval: UInt64 = 500_000_000  // 0.5 s
 
     var body: some View {
         Button {
@@ -34,6 +21,60 @@ struct DownloadProgressView: View {
             Image(systemName: "arrow.down.square")
                 .foregroundStyle(.tint)
         }
+        .popover(isPresented: $isShowingDownload, arrowEdge: .bottom) {
+            DownloadProgressPopover(progress: progress)
+        }
+    }
+}
+
+/// The popover content. It owns the sampling `@State` and the timer task, so it
+/// refreshes itself as the `Progress` advances. Keeping the timer inside the
+/// presented view (rather than on the outer toolbar button) matters because a
+/// SwiftUI popover is an independent presentation that does not reliably
+/// re-render when only the presenting view's state changes.
+private struct DownloadProgressPopover: View {
+    let progress: Progress
+
+    @State private var sampledBytes: Int64 = 0
+    @State private var bytesPerSecond: Double = 0
+
+    private let sampleInterval: UInt64 = 500_000_000  // 0.5 s
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Group {
+                if progress.totalUnitCount > 0 {
+                    ProgressView(value: progress.fractionCompleted)
+                } else {
+                    // Total size unknown yet - show an indeterminate bar.
+                    ProgressView()
+                }
+            }
+            .frame(width: 240)
+
+            VStack(spacing: 4) {
+                Text(sizeText)
+                    .font(.subheadline.monospacedDigit())
+
+                if bytesPerSecond > 1_024 {
+                    Text(
+                        "速度 "
+                            + ByteCountFormatter.string(
+                                fromByteCount: Int64(bytesPerSecond),
+                                countStyle: .file
+                            ) + "/秒"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
+            Text("模型正在下载，完成后即可开始对话")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+        }
+        .padding()
         .task {
             var lastBytes = Int64(0)
             var lastDate = Date()
@@ -52,42 +93,6 @@ struct DownloadProgressView: View {
                 sampledBytes = bytes
                 try? await Task.sleep(nanoseconds: sampleInterval)
             }
-        }
-        .popover(isPresented: $isShowingDownload, arrowEdge: .bottom) {
-            VStack(spacing: 10) {
-                Group {
-                    if progress.totalUnitCount > 0 {
-                        ProgressView(value: progress.fractionCompleted)
-                    } else {
-                        // Total size unknown yet - show an indeterminate bar.
-                        ProgressView()
-                    }
-                }
-                .frame(width: 240)
-
-                VStack(spacing: 4) {
-                    Text(sizeText)
-                        .font(.subheadline.monospacedDigit())
-
-                    if bytesPerSecond > 1_024 {
-                        Text(
-                            "速度 "
-                                + ByteCountFormatter.string(
-                                    fromByteCount: Int64(bytesPerSecond),
-                                    countStyle: .file
-                                ) + "/秒"
-                        )
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-
-                Text("模型正在下载，完成后即可开始对话")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 16)
-            }
-            .padding()
         }
     }
 

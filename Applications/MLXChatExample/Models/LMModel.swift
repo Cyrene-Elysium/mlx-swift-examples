@@ -31,13 +31,10 @@ struct LMModel {
 // MARK: - Helpers
 
 extension LMModel {
-    /// Display name with additional "(Vision)" suffix for vision models
+    /// Display name shown in the picker and model list. The vision/text type
+    /// is conveyed by the status line instead, so no suffix is added here.
     var displayName: String {
-        if isVisionModel {
-            "\(name)（视觉）"
-        } else {
-            name
-        }
+        name
     }
 
     /// Whether the model is a large language model

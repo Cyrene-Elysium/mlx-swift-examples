@@ -51,7 +51,7 @@ struct SessionListView: View {
         ContentUnavailableView {
             Label("暂无对话", systemImage: "text.bubble")
         } description: {
-            Text("开始一段新对话，与本地模型聊天")
+            Text("千束为你备好了本地模型，开始一段新对话吧")
         } actions: {
             Button("新对话") {
                 path.append(store.createSession())
