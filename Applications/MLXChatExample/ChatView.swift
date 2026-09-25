@@ -62,7 +62,7 @@ struct ChatView: View {
     var body: some View {
         // Display conversation history; the prompt bar floats above it so
         // content scrolls beneath the Liquid Glass material.
-        ConversationView(messages: vm.messages)
+        ConversationView(messages: vm.messages, isChisato: vm.session.isChisato)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 VStack(spacing: 8) {
                     // Show media previews if attachments are present

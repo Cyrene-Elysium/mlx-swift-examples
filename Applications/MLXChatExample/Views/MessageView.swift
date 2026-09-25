@@ -14,10 +14,15 @@ struct MessageView: View {
     /// The message to be displayed
     let message: Message
 
+    /// Whether to show the Chisato avatar next to assistant messages
+    /// (only in the dedicated Chisato conversation).
+    let showsChisatoAvatar: Bool
+
     /// Creates a message view
     /// - Parameter message: The message model to display
-    init(_ message: Message) {
+    init(_ message: Message, showsChisatoAvatar: Bool = false) {
         self.message = message
+        self.showsChisatoAvatar = showsChisatoAvatar
     }
 
     var body: some View {
@@ -59,13 +64,16 @@ struct MessageView: View {
             }
 
         case .assistant:
-            // Assistant messages are left-aligned with a Chisato avatar
+            // Assistant messages are left-aligned; the Chisato avatar appears
+            // only in the dedicated Chisato conversation.
             HStack(alignment: .top, spacing: 8) {
-                Image("Chisato")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 28, height: 28)
-                    .clipShape(Circle())
+                if showsChisatoAvatar {
+                    Image("Chisato")
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 28, height: 28)
+                        .clipShape(Circle())
+                }
 
                 // LocalizedStringKey used to trigger default handling of markdown content.
                 Text(LocalizedStringKey(message.content))

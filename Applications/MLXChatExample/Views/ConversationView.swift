@@ -12,11 +12,15 @@ struct ConversationView: View {
     /// Array of messages to display in the conversation
     let messages: [Message]
 
+    /// Whether this is the dedicated Chisato conversation (shows her avatar
+    /// and a faint portrait watermark; plain chats stay clean).
+    let isChisato: Bool
+
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
                 ForEach(messages) { message in
-                    MessageView(message)
+                    MessageView(message, showsChisatoAvatar: isChisato)
                         .padding(.horizontal, 12)
                 }
             }
@@ -24,20 +28,22 @@ struct ConversationView: View {
         .padding(.vertical, 8)
         .defaultScrollAnchor(.bottom, for: .sizeChanges)
         .background {
-            // Faint Chisato watermark so the illustration stays present but
-            // never competes with the conversation text.
-            Image("Chisato")
-                .resizable()
-                .scaledToFit()
-                .opacity(0.07)
-                .padding(.top, 100)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .ignoresSafeArea()
+            if isChisato {
+                // Faint Chisato watermark so the illustration stays present but
+                // never competes with the conversation text.
+                Image("Chisato")
+                    .resizable()
+                    .scaledToFit()
+                    .opacity(0.07)
+                    .padding(.top, 100)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .ignoresSafeArea()
+            }
         }
     }
 }
 
 #Preview {
     // Display sample conversation in preview
-    ConversationView(messages: SampleData.conversation)
+    ConversationView(messages: SampleData.conversation, isChisato: false)
 }
