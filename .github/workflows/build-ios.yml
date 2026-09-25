@@ -46,7 +46,17 @@ jobs:
             INFOPLIST_KEY_CFBundleDisplayName="MLX Chat" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+            CODE_SIGN_IDENTITY="" > "$RUNNER_TEMP/build.log" 2>&1
+
+      - name: Show build errors
+        if: failure()
+        run: |
+          {
+            echo "## Build errors"
+            echo '```'
+            grep -E "error:" "$RUNNER_TEMP/build.log" | head -80 || echo "(no error: lines found)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Package into IPA
         run: |
