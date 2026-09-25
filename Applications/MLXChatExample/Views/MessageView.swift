@@ -68,7 +68,7 @@ struct MessageView: View {
             // only in the dedicated Chisato conversation.
             HStack(alignment: .top, spacing: 8) {
                 if showsChisatoAvatar {
-                    Image("Chisato")
+                    Image("ChisatoAvatar")
                         .resizable()
                         .scaledToFill()
                         .frame(width: 28, height: 28)

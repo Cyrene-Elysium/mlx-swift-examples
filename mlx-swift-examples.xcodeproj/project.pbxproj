@@ -344,6 +344,7 @@
 				MLXChatExample/Views/ModelManagerView.swift,
 				MLXChatExample/Views/PromptField.swift,
 				MLXChatExample/Views/SessionListView.swift,
+				MLXChatExample/Views/SettingsView.swift,
 				MLXChatExample/Views/Toolbar/ChatToolbarView.swift,
 				MLXChatExample/Views/Toolbar/DownloadProgressView.swift,
 				MLXChatExample/Views/Toolbar/ErrorView.swift,

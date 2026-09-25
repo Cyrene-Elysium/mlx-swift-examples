@@ -38,6 +38,12 @@ struct SessionListView: View {
                     }
 
                     NavigationLink {
+                        SettingsView(store: store)
+                    } label: {
+                        Label("设置", systemImage: "gearshape")
+                    }
+
+                    NavigationLink {
                         AboutView()
                     } label: {
                         Label("关于", systemImage: "info.circle")
@@ -99,7 +105,9 @@ struct SessionListView: View {
             .listRowInsets(
                 EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
 
-            ForEach(store.sessions) { session in
+            // The dedicated Chisato conversation lives behind the pinned card
+            // above and is deliberately hidden from this list.
+            ForEach(store.sessions.filter { !$0.isChisato }) { session in
                 NavigationLink(value: session) {
                     SessionRowView(session: session)
                 }
@@ -109,7 +117,10 @@ struct SessionListView: View {
                     EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
             }
             .onDelete { offsets in
-                store.delete(at: offsets)
+                let visible = store.sessions.filter { !$0.isChisato }
+                for index in offsets {
+                    store.delete(visible[index])
+                }
             }
         }
         .listStyle(.plain)
@@ -121,7 +132,7 @@ struct SessionListView: View {
 struct ChisatoEntryCard: View {
     var body: some View {
         HStack(spacing: 12) {
-            Image("Chisato")
+            Image("ChisatoAvatar")
                 .resizable()
                 .scaledToFill()
                 .frame(width: 48, height: 48)
