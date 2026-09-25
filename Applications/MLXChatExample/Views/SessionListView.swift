@@ -36,6 +36,12 @@ struct SessionListView: View {
                     } label: {
                         Label("管理模型", systemImage: "shippingbox.fill")
                     }
+
+                    NavigationLink {
+                        AboutView()
+                    } label: {
+                        Label("关于", systemImage: "info.circle")
+                    }
                 }
             }
             .navigationDestination(for: ChatSession.self) { session in
@@ -46,15 +52,15 @@ struct SessionListView: View {
         }
     }
 
-    /// Shown when there are no conversations yet, with a Chisato illustration.
+    /// Shown when there are no conversations yet, with a faint Chisato illustration.
     private var emptyState: some View {
         VStack(spacing: 16) {
             Image("Chisato")
                 .resizable()
                 .scaledToFit()
                 .frame(height: 300)
+                .opacity(0.45)
                 .clipShape(RoundedRectangle(cornerRadius: 24))
-                .shadow(color: .black.opacity(0.15), radius: 12, y: 6)
 
             Text("千束在这里陪你")
                 .font(.title3.bold())
@@ -63,10 +69,17 @@ struct SessionListView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            Button("新对话") {
-                path.append(store.createSession())
+            HStack(spacing: 12) {
+                Button("和千束聊天") {
+                    path.append(store.chisatoSession())
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button("新对话") {
+                    path.append(store.createSession())
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.borderedProminent)
         }
         .padding()
     }
@@ -74,6 +87,18 @@ struct SessionListView: View {
     /// The list of previous conversations, rendered as tinted Liquid Glass cards.
     private var sessionList: some View {
         List {
+            // 千束专属入口，固定在列表顶部
+            Button {
+                path.append(store.chisatoSession())
+            } label: {
+                ChisatoEntryCard()
+            }
+            .buttonStyle(.plain)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            .listRowInsets(
+                EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
+
             ForEach(store.sessions) { session in
                 NavigationLink(value: session) {
                     SessionRowView(session: session)
@@ -89,6 +114,36 @@ struct SessionListView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+    }
+}
+
+/// A prominent entry card for the dedicated 千束 conversation.
+struct ChisatoEntryCard: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            Image("Chisato")
+                .resizable()
+                .scaledToFill()
+                .frame(width: 48, height: 48)
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("千束")
+                    .font(.headline)
+                Text("和我聊天")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .liquidGlassBackground(in: .rect(cornerRadius: 20))
     }
 }
 

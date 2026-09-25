@@ -23,6 +23,17 @@ struct ConversationView: View {
         }
         .padding(.vertical, 8)
         .defaultScrollAnchor(.bottom, for: .sizeChanges)
+        .background {
+            // Faint Chisato watermark so the illustration stays present but
+            // never competes with the conversation text.
+            Image("Chisato")
+                .resizable()
+                .scaledToFit()
+                .opacity(0.07)
+                .padding(.top, 100)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .ignoresSafeArea()
+        }
     }
 }
 

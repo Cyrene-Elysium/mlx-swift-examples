@@ -28,6 +28,10 @@ class ChatSession: Identifiable {
     /// When the session was last updated.
     var updatedAt: Date
 
+    /// Whether this is the dedicated 「千束」 conversation (uses the Chisato
+    /// persona as its system prompt and shows persona-editing UI).
+    var isChisato: Bool
+
     /// Default title assigned to freshly created sessions.
     static let defaultTitle = "新对话"
 
@@ -37,7 +41,8 @@ class ChatSession: Identifiable {
         createdAt: Date = .now,
         updatedAt: Date = .now,
         modelName: String,
-        messages: [Message] = []
+        messages: [Message] = [],
+        isChisato: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -45,6 +50,7 @@ class ChatSession: Identifiable {
         self.updatedAt = updatedAt
         self.modelName = modelName
         self.messages = messages
+        self.isChisato = isChisato
     }
 
     /// Whether the session contains any real conversation content
@@ -70,6 +76,7 @@ extension ChatSession: Hashable {
 struct SessionRecord: Codable {
     var createdAt: Date
     var id: UUID
+    var isChisato: Bool
     var messages: [MessageRecord]
     var modelName: String
     var title: String

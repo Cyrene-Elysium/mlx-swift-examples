@@ -69,6 +69,24 @@ final class ChatSessionStore {
         return session
     }
 
+    /// Returns the dedicated 千束 conversation, creating it (with the current
+    /// Chisato persona as its system prompt) on first use.
+    func chisatoSession() -> ChatSession {
+        if let existing = sessions.first(where: { $0.isChisato }) {
+            return existing
+        }
+
+        let session = ChatSession(
+            title: "千束",
+            modelName: defaultModelName,
+            messages: [.system(ChisatoProfile.shared.persona)],
+            isChisato: true
+        )
+        sessions.insert(session, at: 0)
+        persist()
+        return session
+    }
+
     /// Deletes a session along with its persisted media attachments.
     func delete(_ session: ChatSession) {
         sessions.removeAll { $0.id == session.id }
@@ -135,6 +153,7 @@ final class ChatSessionStore {
             SessionRecord(
                 createdAt: session.createdAt,
                 id: session.id,
+                isChisato: session.isChisato,
                 messages: session.messages.map { message in
                     MessageRecord(
                         content: message.content,
@@ -199,7 +218,8 @@ final class ChatSessionStore {
                     createdAt: record.createdAt,
                     updatedAt: record.updatedAt,
                     modelName: record.modelName,
-                    messages: messages
+                    messages: messages,
+                    isChisato: record.isChisato
                 )
             }
             .sorted { $0.updatedAt > $1.updatedAt }

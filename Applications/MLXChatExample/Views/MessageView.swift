@@ -59,9 +59,15 @@ struct MessageView: View {
             }
 
         case .assistant:
-            // Assistant messages are left-aligned without background
-            // LocalizedStringKey used to trigger default handling of markdown content.
-            HStack {
+            // Assistant messages are left-aligned with a Chisato avatar
+            HStack(alignment: .top, spacing: 8) {
+                Image("Chisato")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 28, height: 28)
+                    .clipShape(Circle())
+
+                // LocalizedStringKey used to trigger default handling of markdown content.
                 Text(LocalizedStringKey(message.content))
                     .textSelection(.enabled)
 

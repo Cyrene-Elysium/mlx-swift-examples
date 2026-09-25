@@ -201,7 +201,12 @@ class ChatViewModel {
         }
 
         if options.contains(.chat) {
-            session.messages = []
+            if session.isChisato {
+                // 千束会话清空时保留人设 system 提示词
+                session.messages = session.messages.filter { $0.role == .system }
+            } else {
+                session.messages = []
+            }
             generateTask?.cancel()
             store.save(session)
         }
@@ -211,6 +216,18 @@ class ChatViewModel {
         }
 
         errorMessage = nil
+    }
+
+    /// 更新千束人设并同步到当前千束会话的 system 提示词。
+    func updateChisatoPersona(_ text: String) {
+        ChisatoProfile.shared.update(text)
+        let persona = ChisatoProfile.shared.persona
+        if let index = session.messages.firstIndex(where: { $0.role == .system }) {
+            session.messages[index].content = persona
+        } else {
+            session.messages.insert(.system(persona), at: 0)
+        }
+        store.save(session)
     }
 }
 
