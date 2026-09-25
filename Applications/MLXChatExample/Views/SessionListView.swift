@@ -46,18 +46,29 @@ struct SessionListView: View {
         }
     }
 
-    /// Shown when there are no conversations yet.
+    /// Shown when there are no conversations yet, with a Chisato illustration.
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label("暂无对话", systemImage: "text.bubble")
-        } description: {
-            Text("千束为你备好了本地模型，开始一段新对话吧")
-        } actions: {
+        VStack(spacing: 16) {
+            Image("Chisato")
+                .resizable()
+                .scaledToFit()
+                .frame(height: 300)
+                .clipShape(RoundedRectangle(cornerRadius: 24))
+                .shadow(color: .black.opacity(0.15), radius: 12, y: 6)
+
+            Text("千束在这里陪你")
+                .font(.title3.bold())
+
+            Text("开始一段新对话，与本地模型聊天")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
             Button("新对话") {
                 path.append(store.createSession())
             }
             .buttonStyle(.borderedProminent)
         }
+        .padding()
     }
 
     /// The list of previous conversations, rendered as tinted Liquid Glass cards.
