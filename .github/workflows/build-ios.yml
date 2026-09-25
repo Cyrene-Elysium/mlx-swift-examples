@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ipa-build
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: macos-26
@@ -48,14 +52,14 @@ jobs:
           mkdir -p build/Payload
           cp -R "$RUNNER_TEMP/MLXDerivedData/Build/Products/Release-iphoneos/MLXChatExample.app" build/Payload/
           cd build
-          zip -qry MLXChatExample.ipa Payload
-          ls -lh MLXChatExample.ipa
+          zip -qry "MLX Chat.ipa" Payload
+          ls -lh "MLX Chat.ipa"
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MLXChatExample-IPA
-          path: build/MLXChatExample.ipa
+          name: MLX-Chat-IPA
+          path: build/MLX Chat.ipa
           retention-days: 30
 
       - name: Publish to GitHub Release
@@ -63,7 +67,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete ipa-latest --yes --cleanup-tag || true
-          gh release create ipa-latest build/MLXChatExample.ipa \
+          gh release create ipa-latest "build/MLX Chat.ipa" \
             --target "$GITHUB_SHA" \
-            --title "MLXChatExample unsigned IPA" \
-            --notes "Unsigned IPA built from commit $GITHUB_SHA. Sign with Sideloadly (free Apple ID works) before installing. Requires iOS 17+."
+            --title "MLX Chat unsigned IPA" \
+            --notes "Unsigned IPA built from commit $GITHUB_SHA. Sign with Sideloadly (free Apple ID works) before installing. Requires iOS 18+."
