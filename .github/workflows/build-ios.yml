@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/build-ios.yml"
       - "Applications/MLXChatExample/**"
+      - "mlx-swift-examples.xcodeproj/**"
 
 permissions:
   contents: write
