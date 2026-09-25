@@ -2,12 +2,14 @@
 //  ModelManagerView.swift
 //  MLXChatExample
 //
+//  Created by İbrahim Çetin on 21.04.2025.
+//
 
 import SwiftUI
 
-/// Lists all available models with their download status and on-disk size,
-/// lets the user delete downloaded model files to reclaim space, and
-/// selects the model used for new chats.
+/// Lists all available models grouped by download state, lets the user delete
+/// downloaded model files to reclaim space, and selects the model used for new
+/// chats. Uses the iOS 27 Liquid Glass system materials via `.insetGrouped`.
 struct ModelManagerView: View {
     @Bindable var store: ChatSessionStore
 
@@ -23,28 +25,47 @@ struct ModelManagerView: View {
     /// Error message shown when deletion fails.
     @State private var errorMessage: String?
 
+    /// Models that have already been downloaded to this device.
+    private var downloadedModels: [LMModel] {
+        MLXService.availableModels.filter { downloadedSizes[$0.name] != nil }
+    }
+
+    /// Models that are available to download but not yet on this device.
+    private var notDownloadedModels: [LMModel] {
+        MLXService.availableModels.filter { downloadedSizes[$0.name] == nil }
+    }
+
     var body: some View {
         List {
-            ForEach(MLXService.availableModels) { model in
-                modelRow(model)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        if downloadedSizes[model.name] != nil {
-                            Button(role: .destructive) {
-                                modelPendingDeletion = model
-                                showsDeleteConfirmation = true
-                            } label: {
-                                Label("Delete", systemImage: "trash")
+            if !downloadedModels.isEmpty {
+                Section("Downloaded") {
+                    ForEach(downloadedModels) { model in
+                        modelRow(model)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    modelPendingDeletion = model
+                                    showsDeleteConfirmation = true
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
                             }
-                        }
                     }
+                }
+            }
+
+            Section(downloadedModels.isEmpty ? "Available Models" : "More Models") {
+                ForEach(notDownloadedModels) { model in
+                    modelRow(model)
+                }
             }
 
             if !downloadedSizes.isEmpty {
-                Section {
+                Section("Storage") {
                     totalUsageRow
                 }
             }
         }
+        .listStyle(.insetGrouped)
         .navigationTitle("Models")
         .task {
             await refreshDownloadedSizes()
@@ -83,6 +104,21 @@ struct ModelManagerView: View {
         }
     }
 
+    private var totalUsageRow: some View {
+        LabeledContent {
+            Text(
+                ByteCountFormatter.string(
+                    fromByteCount: downloadedSizes.values.reduce(0, +),
+                    countStyle: .file
+                )
+            )
+        } label: {
+            Label("Downloads", systemImage: "internaldrive")
+        }
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+    }
+
     // MARK: - Rows
 
     private func modelRow(_ model: LMModel) -> some View {
@@ -90,13 +126,10 @@ struct ModelManagerView: View {
             store.defaultModelName = model.name
         } label: {
             HStack(spacing: 12) {
-                Image(
-                    systemName: model.isVisionModel
-                        ? "eye" : "character.textbox"
-                )
-                .font(.title3)
-                .foregroundStyle(.tint)
-                .frame(width: 28)
+                Image(systemName: model.isVisionModel ? "eye" : "character.textbox")
+                    .font(.title3)
+                    .foregroundStyle(.tint)
+                    .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(model.displayName)
@@ -118,21 +151,6 @@ struct ModelManagerView: View {
             .padding(.vertical, 2)
         }
         .buttonStyle(.plain)
-    }
-
-    private var totalUsageRow: some View {
-        LabeledContent {
-            Text(
-                ByteCountFormatter.string(
-                    fromByteCount: downloadedSizes.values.reduce(0, +),
-                    countStyle: .file
-                )
-            )
-        } label: {
-            Label("Downloads", systemImage: "internaldrive")
-        }
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
     }
 
     // MARK: - Helpers

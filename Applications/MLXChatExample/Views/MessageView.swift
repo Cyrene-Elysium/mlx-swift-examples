@@ -52,6 +52,7 @@ struct MessageView: View {
                     Text(LocalizedStringKey(message.content))
                         .padding(.vertical, 8)
                         .padding(.horizontal, 12)
+                        .foregroundStyle(.white)
                         .background(.tint, in: .rect(cornerRadius: 16))
                         .textSelection(.enabled)
                 }

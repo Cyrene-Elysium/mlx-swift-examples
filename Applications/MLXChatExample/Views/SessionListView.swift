@@ -60,22 +60,28 @@ struct SessionListView: View {
         }
     }
 
-    /// The list of previous conversations.
+    /// The list of previous conversations, rendered as tinted Liquid Glass cards.
     private var sessionList: some View {
         List {
             ForEach(store.sessions) { session in
                 NavigationLink(value: session) {
                     SessionRowView(session: session)
                 }
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(
+                    EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
             }
             .onDelete { offsets in
                 store.delete(at: offsets)
             }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
     }
 }
 
-/// A single row in the session list.
+/// A single row in the session list, rendered as a Liquid Glass card.
 struct SessionRowView: View {
     let session: ChatSession
 
@@ -100,7 +106,9 @@ struct SessionRowView: View {
                 .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .liquidGlassBackground(in: .rect(cornerRadius: 20))
     }
 }
 
