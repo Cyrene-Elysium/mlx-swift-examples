@@ -51,6 +51,9 @@ jobs:
       - name: Show build errors
         if: failure()
         run: |
+          grep -E "error:" "$RUNNER_TEMP/build.log" | head -40 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
           {
             echo "## Build errors"
             echo '```'
