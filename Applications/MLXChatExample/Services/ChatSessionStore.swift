@@ -35,7 +35,7 @@ final class ChatSessionStore {
 
     init() {
         let support = URL.applicationSupportDirectory
-        mediaDirectory = support.appending(path: "SessionMedia", isDirectory: true)
+        mediaDirectory = support.appending(path: "SessionMedia", directoryHint: .isDirectory)
         storageURL = support.appending(path: "sessions.json")
 
         try? FileManager.default.createDirectory(
@@ -101,7 +101,7 @@ final class ChatSessionStore {
 
     /// Media directory for a session, created on demand.
     func mediaDirectory(for session: ChatSession) -> URL {
-        let dir = mediaDirectory.appending(path: session.id.uuidString, isDirectory: true)
+        let dir = mediaDirectory.appending(path: session.id.uuidString, directoryHint: .isDirectory)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
