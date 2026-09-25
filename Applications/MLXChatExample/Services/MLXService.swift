@@ -56,8 +56,11 @@ class MLXService {
         // cache paged in and out), which slows generation a lot. Use ~1/4 of
         // RAM, clamped to a safe [512 MB, 4 GB] window.
         let physicalMemory = ProcessInfo.processInfo.physicalMemory
-        Memory.cacheLimit = Int(
-            min(max(physicalMemory / 4, 512 * 1024 * 1024), 4 * 1024 * 1024 * 1024))
+        let quarter = physicalMemory / 4
+        let cacheLimit = min(
+            max(quarter, UInt64(512 * 1024 * 1024)),
+            UInt64(4 * 1024 * 1024 * 1024))
+        Memory.cacheLimit = Int(cacheLimit)
 
         // Return cached model if available to avoid reloading
         if let container = modelCache.object(forKey: model.name as NSString) {
@@ -176,12 +179,14 @@ class MLXService {
     private static func samplingParameters(thinking: Bool, kvBits: Int?) -> GenerateParameters {
         if thinking {
             return GenerateParameters(
+                maxTokens: 4096, kvBits: kvBits,
                 temperature: 0.6, topP: 0.95, topK: 20,
-                maxTokens: 4096, repetitionPenalty: 1.05, kvBits: kvBits)
+                repetitionPenalty: 1.05)
         } else {
             return GenerateParameters(
+                maxTokens: 2048, kvBits: kvBits,
                 temperature: 0.7, topP: 0.8, topK: 20,
-                maxTokens: 2048, repetitionPenalty: 1.05, kvBits: kvBits)
+                repetitionPenalty: 1.05)
         }
     }
 
