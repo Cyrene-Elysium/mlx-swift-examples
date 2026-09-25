@@ -29,6 +29,22 @@ class MLXService {
         LMModel(name: "qwen3:4b", configuration: LLMRegistry.qwen3_4b_4bit, type: .llm),
         LMModel(name: "qwen3:8b", configuration: LLMRegistry.qwen3_8b_4bit, type: .llm),
         LMModel(
+            name: "r1-0528:8b",
+            configuration: ModelConfiguration(
+                id: "mlx-community/DeepSeek-R1-0528-Qwen3-8B-4bit",
+                defaultPrompt: "Tell me about the history of Spain."
+            ),
+            type: .llm
+        ),
+        LMModel(
+            name: "qwen3:4b-2507",
+            configuration: ModelConfiguration(
+                id: "mlx-community/Qwen3-4B-Instruct-2507-4bit",
+                defaultPrompt: "Why is the sky blue?"
+            ),
+            type: .llm
+        ),
+        LMModel(
             name: "qwen2.5VL:3b", configuration: VLMRegistry.qwen2_5VL3BInstruct4Bit, type: .vlm),
         LMModel(name: "qwen2VL:2b", configuration: VLMRegistry.qwen2VL2BInstruct4Bit, type: .vlm),
         LMModel(name: "smolVLM", configuration: VLMRegistry.smolvlminstruct4bit, type: .vlm),
