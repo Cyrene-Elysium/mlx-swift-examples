@@ -322,6 +322,7 @@
 		C314FDDA2EF3315A00E5B73A /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				MLXChatExample/AppIcon.icon,
 				MLXChatExample/ChatView.swift,
 				MLXChatExample/MLXChatExampleApp.swift,
 				MLXChatExample/Models/ChatSession.swift,
