@@ -34,7 +34,7 @@ extension LMModel {
     /// Display name with additional "(Vision)" suffix for vision models
     var displayName: String {
         if isVisionModel {
-            "\(name) (Vision)"
+            "\(name)（视觉）"
         } else {
             name
         }

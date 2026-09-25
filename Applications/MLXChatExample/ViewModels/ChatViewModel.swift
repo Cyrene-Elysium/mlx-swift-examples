@@ -158,7 +158,7 @@ class ChatViewModel {
                     if let persisted = store.persistMedia(at: url, for: session) {
                         mediaSelection.images = [persisted]
                     } else {
-                        errorMessage = "Failed to save the selected image."
+                        errorMessage = "保存所选图片失败。"
                     }
                 } else if mediaType.conforms(to: .movie) {
                     mediaSelection.videos = [url]

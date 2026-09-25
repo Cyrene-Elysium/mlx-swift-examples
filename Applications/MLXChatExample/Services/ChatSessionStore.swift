@@ -62,7 +62,7 @@ final class ChatSessionStore {
 
         let session = ChatSession(
             modelName: model.name,
-            messages: [.system("You are a helpful assistant!")]
+            messages: [.system("你是一个乐于助人的AI助手。")]
         )
         sessions.insert(session, at: 0)
         persist()

@@ -38,7 +38,7 @@ struct ModelManagerView: View {
     var body: some View {
         List {
             if !downloadedModels.isEmpty {
-                Section("Downloaded") {
+                Section("已下载") {
                     ForEach(downloadedModels) { model in
                         modelRow(model)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -53,20 +53,20 @@ struct ModelManagerView: View {
                 }
             }
 
-            Section(downloadedModels.isEmpty ? "Available Models" : "More Models") {
+            Section(downloadedModels.isEmpty ? "可用模型" : "更多模型") {
                 ForEach(notDownloadedModels) { model in
                     modelRow(model)
                 }
             }
 
             if !downloadedSizes.isEmpty {
-                Section("Storage") {
+                Section("存储") {
                     totalUsageRow
                 }
             }
         }
         .listStyle(.insetGrouped)
-        .navigationTitle("Models")
+        .navigationTitle("模型")
         .task {
             await refreshDownloadedSizes()
         }
@@ -74,31 +74,31 @@ struct ModelManagerView: View {
             await refreshDownloadedSizes()
         }
         .confirmationDialog(
-            "Delete downloaded model?",
+            "删除已下载的模型？",
             isPresented: $showsDeleteConfirmation,
             titleVisibility: .visible
         ) {
             Button(
-                "Delete \(modelPendingDeletion?.name ?? "") downloads",
+                "删除 \(modelPendingDeletion?.name ?? "") 的模型文件",
                 role: .destructive
             ) {
                 performDeletion()
             }
-            Button("Cancel", role: .cancel) {}
+            Button("取消", role: .cancel) {}
         } message: {
             Text(
-                "This removes the model files from this device. "
-                    + "The model will be downloaded again the next time it is used."
+                "将从本机删除该模型的文件，"
+                    + "下次使用时会重新下载。"
             )
         }
         .alert(
-            "Delete Failed",
+            "删除失败",
             isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
             )
         ) {
-            Button("OK", role: .cancel) {}
+            Button("好", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
@@ -113,7 +113,7 @@ struct ModelManagerView: View {
                 )
             )
         } label: {
-            Label("Downloads", systemImage: "internaldrive")
+            Label("已用空间", systemImage: "internaldrive")
         }
         .font(.subheadline)
         .foregroundStyle(.secondary)
@@ -157,12 +157,12 @@ struct ModelManagerView: View {
 
     private func statusLine(for model: LMModel) -> String {
         if let size = downloadedSizes[model.name] {
-            "Downloaded · "
+            "已下载 · "
                 + ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
         } else if model.isVisionModel {
-            "Vision · not downloaded"
+            "视觉模型 · 未下载"
         } else {
-            "Not downloaded"
+            "未下载"
         }
     }
 

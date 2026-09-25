@@ -34,7 +34,7 @@ struct ChatToolbarView: View {
         }
 
         // Model selection picker
-        Picker("Model", selection: $vm.selectedModel) {
+        Picker("模型", selection: $vm.selectedModel) {
             ForEach(MLXService.availableModels) { model in
                 Text(model.displayName)
                     .tag(model)

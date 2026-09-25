@@ -27,7 +27,7 @@ struct PromptField: View {
                 .buttonStyle(.plain)
             }
 
-            TextField("Message", text: $prompt, axis: .vertical)
+            TextField("输入消息", text: $prompt, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...5)
 

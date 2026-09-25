@@ -28,13 +28,13 @@ struct SessionListView: View {
                     Button {
                         path.append(store.createSession())
                     } label: {
-                        Label("New Chat", systemImage: "square.and.pencil")
+                        Label("新对话", systemImage: "square.and.pencil")
                     }
 
                     NavigationLink {
                         ModelManagerView(store: store)
                     } label: {
-                        Label("Manage Models", systemImage: "brain")
+                        Label("管理模型", systemImage: "shippingbox.fill")
                     }
                 }
             }
@@ -49,11 +49,11 @@ struct SessionListView: View {
     /// Shown when there are no conversations yet.
     private var emptyState: some View {
         ContentUnavailableView {
-            Label("No Conversations", systemImage: "text.bubble")
+            Label("暂无对话", systemImage: "text.bubble")
         } description: {
-            Text("Start a new chat to talk with a local model.")
+            Text("开始一段新对话，与本地模型聊天")
         } actions: {
-            Button("New Chat") {
+            Button("新对话") {
                 path.append(store.createSession())
             }
             .buttonStyle(.borderedProminent)

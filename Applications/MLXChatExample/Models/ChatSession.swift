@@ -29,7 +29,7 @@ class ChatSession: Identifiable {
     var updatedAt: Date
 
     /// Default title assigned to freshly created sessions.
-    static let defaultTitle = "New Chat"
+    static let defaultTitle = "新对话"
 
     init(
         id: UUID = UUID(),
