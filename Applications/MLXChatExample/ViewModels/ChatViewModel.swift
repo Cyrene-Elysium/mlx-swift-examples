@@ -33,6 +33,8 @@ class ChatViewModel {
             ?? MLXService.availableModels.first!
         self.thinkingEnabled =
             UserDefaults.standard.object(forKey: "thinkingEnabled") as? Bool ?? true
+        self.kvCacheQuantized =
+            UserDefaults.standard.object(forKey: "kvCacheQuantized") as? Bool ?? false
     }
 
     /// Current user input text
@@ -59,6 +61,15 @@ class ChatViewModel {
     var thinkingEnabled: Bool {
         didSet {
             UserDefaults.standard.set(thinkingEnabled, forKey: "thinkingEnabled")
+        }
+    }
+
+    /// Whether the KV cache is quantized to 8-bit. Halves long-context memory
+    /// use at a negligible quality cost; off by default because not every
+    /// model in the list has been validated with quantized KV cache.
+    var kvCacheQuantized: Bool {
+        didSet {
+            UserDefaults.standard.set(kvCacheQuantized, forKey: "kvCacheQuantized")
         }
     }
 
@@ -115,7 +126,8 @@ class ChatViewModel {
             // Process generation chunks and update UI
             for await generation in try await mlxService.generate(
                 messages: messages, model: selectedModel,
-                thinkingEnabled: selectedModel.supportsThinking ? thinkingEnabled : nil
+                thinkingEnabled: selectedModel.supportsThinking ? thinkingEnabled : nil,
+                kvBits: kvCacheQuantized ? 8 : nil
             )
             {
                 switch generation {

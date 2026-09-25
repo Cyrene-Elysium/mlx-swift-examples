@@ -44,6 +44,15 @@ struct ChatToolbarView: View {
             }
         }
 
+        // KV-cache quantization toggle (8-bit) to save memory on long chats
+        Button {
+            vm.kvCacheQuantized.toggle()
+        } label: {
+            Image(systemName: "memorychip")
+                .foregroundStyle(
+                    vm.kvCacheQuantized ? Color.accentColor : Color.secondary)
+        }
+
         // Model selection picker
         Picker("模型", selection: $vm.selectedModel) {
             ForEach(MLXService.availableModels) { model in

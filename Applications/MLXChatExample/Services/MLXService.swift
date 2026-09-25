@@ -109,7 +109,8 @@ class MLXService {
     /// - Returns: An AsyncStream of generated text tokens
     /// - Throws: Errors that might occur during generation
     func generate(
-        messages: [Message], model: LMModel, thinkingEnabled: Bool? = nil
+        messages: [Message], model: LMModel, thinkingEnabled: Bool? = nil,
+        kvBits: Int? = nil
     ) async throws -> AsyncStream<Generation> {
         // Load or retrieve model from cache
         let modelContainer = try await load(model: model)
@@ -157,7 +158,8 @@ class MLXService {
         // Generate response using the model
         return try await modelContainer.perform { (context: ModelContext) in
             let lmInput = try await context.processor.prepare(input: userInput)
-            let parameters = Self.samplingParameters(thinking: thinkingEnabled == true)
+            let parameters = Self.samplingParameters(
+                thinking: thinkingEnabled == true, kvBits: kvBits)
 
             return try MLXLMCommon.generate(
                 input: lmInput, parameters: parameters, context: context)
@@ -168,16 +170,18 @@ class MLXService {
     /// recommended lower temperature and narrower nucleus for coherent
     /// reasoning chains; non-thinking uses a slightly higher temperature for
     /// conversational answers. A light repetition penalty and a max-token cap
-    /// keep output from repeating or running away.
-    private static func samplingParameters(thinking: Bool) -> GenerateParameters {
+    /// keep output from repeating or running away. `kvBits` optionally enables
+    /// KV-cache quantization (8 halves long-context memory with negligible
+    /// quality loss).
+    private static func samplingParameters(thinking: Bool, kvBits: Int?) -> GenerateParameters {
         if thinking {
             return GenerateParameters(
                 temperature: 0.6, topP: 0.95, topK: 20,
-                maxTokens: 4096, repetitionPenalty: 1.05)
+                maxTokens: 4096, repetitionPenalty: 1.05, kvBits: kvBits)
         } else {
             return GenerateParameters(
                 temperature: 0.7, topP: 0.8, topK: 20,
-                maxTokens: 2048, repetitionPenalty: 1.05)
+                maxTokens: 2048, repetitionPenalty: 1.05, kvBits: kvBits)
         }
     }
 
