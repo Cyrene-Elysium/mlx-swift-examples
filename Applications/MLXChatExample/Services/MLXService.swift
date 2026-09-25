@@ -27,12 +27,15 @@ class MLXService {
     static let availableModels: [LMModel] = [
         LMModel(name: "qwen3:4b", configuration: LLMRegistry.qwen3_4b_4bit, type: .llm),
         LMModel(
+            name: "qwen3.5:2b", configuration: LLMRegistry.qwen3_5_2b_4bit, type: .llm),
+        LMModel(name: "glm4:9b", configuration: LLMRegistry.glm4_9b_4bit, type: .llm),
+        LMModel(name: "mimo:7b", configuration: LLMRegistry.mimo_7b_sft_4bit, type: .llm),
+        LMModel(
+            name: "lfm2:8b", configuration: LLMRegistry.lfm2_8b_a1b_3bit_mlx, type: .llm),
+        LMModel(
             name: "gemma4:E4B", configuration: VLMRegistry.gemma4_E4B_it_4bit, type: .vlm),
         LMModel(
             name: "gemma4:E2B", configuration: VLMRegistry.gemma4_E2B_it_4bit, type: .vlm),
-        LMModel(
-            name: "qwen3.5:2b", configuration: LLMRegistry.qwen3_5_2b_4bit, type: .llm),
-        LMModel(name: "qwen3:8b", configuration: LLMRegistry.qwen3_8b_4bit, type: .llm),
     ]
 
     /// Cache to store loaded model containers to avoid reloading.
@@ -48,8 +51,13 @@ class MLXService {
     /// - Returns: A ModelContainer instance containing the loaded model
     /// - Throws: Errors that might occur during model loading
     private func load(model: LMModel) async throws -> ModelContainer {
-        // Set GPU memory limit to prevent out of memory issues
-        Memory.cacheLimit = 20 * 1024 * 1024
+        // Size the MLX cache from physical memory. The original 20 MB limit is
+        // far too small and causes constant cache thrashing (activations / KV
+        // cache paged in and out), which slows generation a lot. Use ~1/4 of
+        // RAM, clamped to a safe [512 MB, 4 GB] window.
+        let physicalMemory = ProcessInfo.processInfo.physicalMemory
+        Memory.cacheLimit = Int(
+            min(max(physicalMemory / 4, 512 * 1024 * 1024), 4 * 1024 * 1024 * 1024))
 
         // Return cached model if available to avoid reloading
         if let container = modelCache.object(forKey: model.name as NSString) {
@@ -149,11 +157,27 @@ class MLXService {
         // Generate response using the model
         return try await modelContainer.perform { (context: ModelContext) in
             let lmInput = try await context.processor.prepare(input: userInput)
-            // Set temperature for response randomness (0.7 provides good balance)
-            let parameters = GenerateParameters(temperature: 0.7)
+            let parameters = Self.samplingParameters(thinking: thinkingEnabled == true)
 
             return try MLXLMCommon.generate(
                 input: lmInput, parameters: parameters, context: context)
+        }
+    }
+
+    /// Sampling parameters tuned per mode. Thinking mode uses Qwen3's
+    /// recommended lower temperature and narrower nucleus for coherent
+    /// reasoning chains; non-thinking uses a slightly higher temperature for
+    /// conversational answers. A light repetition penalty and a max-token cap
+    /// keep output from repeating or running away.
+    private static func samplingParameters(thinking: Bool) -> GenerateParameters {
+        if thinking {
+            return GenerateParameters(
+                temperature: 0.6, topP: 0.95, topK: 20,
+                maxTokens: 4096, repetitionPenalty: 1.05)
+        } else {
+            return GenerateParameters(
+                temperature: 0.7, topP: 0.8, topK: 20,
+                maxTokens: 2048, repetitionPenalty: 1.05)
         }
     }
 
