@@ -151,8 +151,8 @@ class MLXService {
     /// (`<downloadBase>/models--<org>--<name>`).
     @MainActor
     static func downloadDirectory(for model: LMModel) -> URL {
-        let repo = model.configuration.id.replacingOccurrences(of: "/", with: "--")
-        return HubApi.default.downloadBase.appending(path: "models--\(repo)")
+        let repo = model.configuration.name.replacingOccurrences(of: "/", with: "--")
+        return HubApi.downloadBaseURL.appending(path: "models--\(repo)")
     }
 
     /// Whether the model's files have been downloaded to disk.
