@@ -39,7 +39,8 @@ struct ChatToolbarView: View {
                 vm.thinkingEnabled.toggle()
             } label: {
                 Image(systemName: vm.thinkingEnabled ? "lightbulb.fill" : "lightbulb")
-                    .foregroundStyle(vm.thinkingEnabled ? .tint : .secondary)
+                    .foregroundStyle(
+                        vm.thinkingEnabled ? Color.accentColor : Color.secondary)
             }
         }
 
