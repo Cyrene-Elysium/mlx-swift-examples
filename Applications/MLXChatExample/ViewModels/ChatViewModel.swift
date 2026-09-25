@@ -31,6 +31,8 @@ class ChatViewModel {
         self.selectedModel =
             MLXService.availableModels.first { $0.name == session.modelName }
             ?? MLXService.availableModels.first!
+        self.thinkingEnabled =
+            UserDefaults.standard.object(forKey: "thinkingEnabled") as? Bool ?? true
     }
 
     /// Current user input text
@@ -51,6 +53,14 @@ class ChatViewModel {
 
     /// Manages image and video attachments for the current message
     var mediaSelection = MediaSelection()
+
+    /// Whether thinking mode is enabled for models supporting the soft switch
+    /// (Qwen3 hybrid thinking). Persisted per app, not per session.
+    var thinkingEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(thinkingEnabled, forKey: "thinkingEnabled")
+        }
+    }
 
     /// Indicates if text generation is in progress
     var isGenerating = false
@@ -104,7 +114,9 @@ class ChatViewModel {
         generateTask = Task {
             // Process generation chunks and update UI
             for await generation in try await mlxService.generate(
-                messages: messages, model: selectedModel)
+                messages: messages, model: selectedModel,
+                thinkingEnabled: selectedModel.supportsThinking ? thinkingEnabled : nil
+            )
             {
                 switch generation {
                 case .chunk(let chunk):

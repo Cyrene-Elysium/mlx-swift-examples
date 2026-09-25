@@ -49,6 +49,13 @@ extension LMModel {
     var isVisionModel: Bool {
         type == .vlm
     }
+
+    /// Whether the model supports the `/think` and `/no_think` soft switches
+    /// appended to the user message (Qwen3 hybrid-thinking models do; the
+    /// `enable_thinking` template parameter is not honored by their templates).
+    var supportsThinking: Bool {
+        name.hasPrefix("qwen3")
+    }
 }
 
 extension LMModel: Identifiable, Hashable {

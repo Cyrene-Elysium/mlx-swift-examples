@@ -25,22 +25,11 @@ class MLXService {
     /// List of available models that can be used for generation.
     /// Includes both language models (LLM) and vision-language models (VLM).
     static let availableModels: [LMModel] = [
-        LMModel(name: "llama3.2:1b", configuration: LLMRegistry.llama3_2_1B_4bit, type: .llm),
-        LMModel(name: "qwen2.5:1.5b", configuration: LLMRegistry.qwen2_5_1_5b, type: .llm),
-        LMModel(name: "smolLM:135m", configuration: LLMRegistry.smolLM_135M_4bit, type: .llm),
-        LMModel(name: "qwen3:0.6b", configuration: LLMRegistry.qwen3_0_6b_4bit, type: .llm),
-        LMModel(name: "qwen3:1.7b", configuration: LLMRegistry.qwen3_1_7b_4bit, type: .llm),
         LMModel(name: "qwen3:4b", configuration: LLMRegistry.qwen3_4b_4bit, type: .llm),
-        LMModel(name: "qwen3:8b", configuration: LLMRegistry.qwen3_8b_4bit, type: .llm),
         LMModel(
-            name: "qwen2.5VL:3b", configuration: VLMRegistry.qwen2_5VL3BInstruct4Bit, type: .vlm),
-        LMModel(name: "qwen2VL:2b", configuration: VLMRegistry.qwen2VL2BInstruct4Bit, type: .vlm),
-        LMModel(name: "smolVLM", configuration: VLMRegistry.smolvlminstruct4bit, type: .vlm),
-        LMModel(name: "gemma4:E2B", configuration: VLMRegistry.gemma4_E2B_it_4bit, type: .vlm),
-        LMModel(name: "gemma4:E4B", configuration: VLMRegistry.gemma4_E4B_it_4bit, type: .vlm),
-        LMModel(name: "acereason:7B", configuration: LLMRegistry.acereason_7b_4bit, type: .llm),
-        LMModel(name: "gemma3n:E2B", configuration: LLMRegistry.gemma3n_E2B_it_lm_4bit, type: .llm),
-        LMModel(name: "gemma3n:E4B", configuration: LLMRegistry.gemma3n_E4B_it_lm_4bit, type: .llm),
+            name: "qwen3.5:2b", configuration: LLMRegistry.qwen3_5_2b_4bit, type: .llm),
+        LMModel(
+            name: "gemma4:E2B", configuration: VLMRegistry.gemma4_E2B_it_4bit, type: .vlm),
     ]
 
     /// Cache to store loaded model containers to avoid reloading.
@@ -72,7 +61,14 @@ class MLXService {
                     VLMModelFactory.shared
                 }
 
-            let downloader = #hubDownloader()
+            // Pin the downloader to the same cache directory the model manager
+            // scans (HubApi.downloadBaseURL). The macro's no-argument form
+            // builds a HubClient with an environment-resolved cache location,
+            // which does not match - that mismatch made downloaded models show
+            // up as "not downloaded".
+            let downloader = #hubDownloader(
+                HubClient(cache: HubCache(cacheDirectory: HubApi.downloadBaseURL))
+            )
             let loader = #huggingFaceTokenizerLoader()
 
             // Load model and track download progress
@@ -97,9 +93,13 @@ class MLXService {
     /// - Parameters:
     ///   - messages: Array of chat messages including user, assistant, and system messages
     ///   - model: The language model to use for generation
+    ///   - thinkingEnabled: For models supporting the `/think` soft switch, controls
+    ///     whether the thinking mode is on; ignored when nil or unsupported
     /// - Returns: An AsyncStream of generated text tokens
     /// - Throws: Errors that might occur during generation
-    func generate(messages: [Message], model: LMModel) async throws -> AsyncStream<Generation> {
+    func generate(
+        messages: [Message], model: LMModel, thinkingEnabled: Bool? = nil
+    ) async throws -> AsyncStream<Generation> {
         // Load or retrieve model from cache
         let modelContainer = try await load(model: model)
 
@@ -111,7 +111,7 @@ class MLXService {
         }
 
         // Map app-specific Message type to Chat.Message for model input
-        let chat = inputMessages.map { message in
+        var chat = inputMessages.map { message in
             let role: Chat.Message.Role =
                 switch message.role {
                 case .assistant:
@@ -128,6 +128,15 @@ class MLXService {
 
             return Chat.Message(
                 role: role, content: message.content, images: images, videos: videos)
+        }
+
+        // Qwen3-style soft switch: appended to the last user turn it toggles
+        // the thinking mode regardless of the model's chat template support.
+        // Applied only to the outbound copy, never to the persisted messages.
+        if let thinkingEnabled, model.supportsThinking,
+            let index = chat.lastIndex(where: { $0.role == .user })
+        {
+            chat[index].content += thinkingEnabled ? " /think" : " /no_think"
         }
 
         // Prepare input for model processing
