@@ -120,8 +120,12 @@ class ChatViewModel {
                         assistantMessage.content += chunk
                     }
                 case .info(let info):
-                    // Update performance metrics
+                    // Update performance metrics and stamp this reply's speed
+                    // onto the assistant message itself.
                     generateCompletionInfo = info
+                    if let assistantMessage = session.messages.last {
+                        assistantMessage.tokensPerSecond = info.tokensPerSecond
+                    }
                 case .toolCall:
                     break
                 }

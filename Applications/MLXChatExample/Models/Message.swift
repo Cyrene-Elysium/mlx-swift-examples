@@ -29,6 +29,10 @@ class Message: Identifiable {
     /// Timestamp when the message was created
     let timestamp: Date
 
+    /// Generation speed (tokens/sec) for this assistant reply, measured when
+    /// the reply was produced. nil for user/system messages or if unavailable.
+    var tokensPerSecond: Double?
+
     /// Creates a new message with the specified role, content, and optional media attachments
     /// - Parameters:
     ///   - role: The role of the message sender
@@ -36,9 +40,10 @@ class Message: Identifiable {
     ///   - images: Optional array of image URLs
     ///   - videos: Optional array of video URLs
     ///   - timestamp: When the message was created (defaults to now)
+    ///   - tokensPerSecond: Measured generation speed, if any
     init(
         role: Role, content: String, images: [URL] = [], videos: [URL] = [],
-        timestamp: Date = .now
+        timestamp: Date = .now, tokensPerSecond: Double? = nil
     ) {
         self.id = UUID()
         self.role = role
@@ -46,6 +51,7 @@ class Message: Identifiable {
         self.images = images
         self.videos = videos
         self.timestamp = timestamp
+        self.tokensPerSecond = tokensPerSecond
     }
 
     /// Defines the role of the message sender in the conversation

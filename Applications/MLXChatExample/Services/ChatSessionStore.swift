@@ -165,7 +165,8 @@ final class ChatSessionStore {
                             case .system: "system"
                             }
                         }(),
-                        timestamp: message.timestamp
+                        timestamp: message.timestamp,
+                        tokensPerSecond: message.tokensPerSecond
                     )
                 },
                 modelName: session.modelName,
@@ -208,7 +209,8 @@ final class ChatSessionStore {
                     return Message(
                         role: role,
                         content: message.content,
-                        images: message.images.map { mediaDir.appending(path: $0) }
+                        images: message.images.map { mediaDir.appending(path: $0) },
+                        tokensPerSecond: message.tokensPerSecond
                     )
                 }
 

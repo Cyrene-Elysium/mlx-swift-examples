@@ -28,15 +28,12 @@ struct ChatToolbarView: View {
             DownloadProgressView(progress: progress)
         }
 
-        // Generation statistics (read-only display)
-        GenerationInfoView(tokensPerSecond: vm.tokensPerSecond)
-
         // Clear chat history (explicit, with confirmation)
         Button {
             showsClearConfirmation = true
         } label: {
             Image(systemName: "trash")
-                .foregroundStyle(Color.secondary)
+                .foregroundStyle(.red)
         }
         .confirmationDialog(
             "清空当前对话？",

@@ -75,9 +75,18 @@ struct MessageView: View {
                         .clipShape(Circle())
                 }
 
-                // LocalizedStringKey used to trigger default handling of markdown content.
-                Text(LocalizedStringKey(message.content))
-                    .textSelection(.enabled)
+                VStack(alignment: .leading, spacing: 6) {
+                    // LocalizedStringKey used to trigger default handling of markdown content.
+                    Text(LocalizedStringKey(message.content))
+                        .textSelection(.enabled)
+
+                    // Per-reply generation speed.
+                    if let speed = message.tokensPerSecond {
+                        Text(String(format: "%.1f tok/s", speed))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
 
                 Spacer()
             }

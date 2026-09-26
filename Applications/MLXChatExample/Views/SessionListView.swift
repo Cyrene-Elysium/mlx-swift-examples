@@ -15,79 +15,49 @@ struct SessionListView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            Group {
-                if store.sessions.isEmpty {
-                    emptyState
-                } else {
-                    sessionList
+            sessionList
+                .navigationTitle("MLX Chat")
+                .toolbar {
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        NavigationLink {
+                            ModelManagerView(store: store)
+                        } label: {
+                            Label("管理模型", systemImage: "shippingbox.fill")
+                        }
+
+                        NavigationLink {
+                            SettingsView(store: store)
+                        } label: {
+                            Label("设置", systemImage: "gearshape")
+                        }
+
+                        NavigationLink {
+                            AboutView()
+                        } label: {
+                            Label("关于", systemImage: "info.circle")
+                        }
+                    }
                 }
-            }
-            .navigationTitle("MLX Chat")
-            .toolbar {
-                ToolbarItemGroup(placement: .primaryAction) {
+                .overlay(alignment: .bottomTrailing) {
+                    // Floating new-chat button (plain liquid glass, no gradient)
                     Button {
                         path.append(store.createSession())
                     } label: {
-                        Label("新对话", systemImage: "square.and.pencil")
+                        Image(systemName: "square.and.pencil")
+                            .font(.title3)
+                            .foregroundStyle(.tint)
+                            .frame(width: 56, height: 56)
                     }
-
-                    NavigationLink {
-                        ModelManagerView(store: store)
-                    } label: {
-                        Label("管理模型", systemImage: "shippingbox.fill")
-                    }
-
-                    NavigationLink {
-                        SettingsView(store: store)
-                    } label: {
-                        Label("设置", systemImage: "gearshape")
-                    }
-
-                    NavigationLink {
-                        AboutView()
-                    } label: {
-                        Label("关于", systemImage: "info.circle")
-                    }
+                    .buttonStyle(.plain)
+                    .liquidGlassBackground(in: .circle)
+                    .padding(24)
                 }
-            }
-            .navigationDestination(for: ChatSession.self) { session in
-                ChatView(
-                    viewModel: ChatViewModel(
-                        mlxService: .shared, session: session, store: store))
-            }
+                .navigationDestination(for: ChatSession.self) { session in
+                    ChatView(
+                        viewModel: ChatViewModel(
+                            mlxService: .shared, session: session, store: store))
+                }
         }
-    }
-
-    /// Shown when there are no conversations yet, with a faint Chisato illustration.
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image("Chisato")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 300)
-                .opacity(0.45)
-                .clipShape(RoundedRectangle(cornerRadius: 24))
-
-            Text("千束在这里陪你")
-                .font(.title3.bold())
-
-            Text("开始一段新对话，与本地模型聊天")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 12) {
-                Button("和千束聊天") {
-                    path.append(store.chisatoSession())
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button("新对话") {
-                    path.append(store.createSession())
-                }
-                .buttonStyle(.bordered)
-            }
-        }
-        .padding()
     }
 
     /// The list of previous conversations, rendered as tinted Liquid Glass cards.

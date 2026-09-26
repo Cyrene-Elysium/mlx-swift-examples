@@ -91,4 +91,5 @@ struct MessageRecord: Codable {
     var images: [String]
     var role: String
     var timestamp: Date
+    var tokensPerSecond: Double?
 }
