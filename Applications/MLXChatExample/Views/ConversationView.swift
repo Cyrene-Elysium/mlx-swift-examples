@@ -19,7 +19,9 @@ struct ConversationView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
-                ForEach(messages) { message in
+                // System prompts (persona / assistant instructions) are internal
+                // and must never be rendered in the conversation.
+                ForEach(messages.filter { $0.role != .system }) { message in
                     MessageView(message, showsChisatoAvatar: isChisato)
                         .padding(.horizontal, 12)
                 }

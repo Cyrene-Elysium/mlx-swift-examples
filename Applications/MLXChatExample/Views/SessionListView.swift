@@ -100,6 +100,7 @@ struct SessionListView: View {
                 ChisatoEntryCard()
             }
             .buttonStyle(.plain)
+            .contentShape(Rectangle())
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
             .listRowInsets(
@@ -154,6 +155,7 @@ struct ChisatoEntryCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
+        .contentShape(Rectangle())
         .liquidGlassBackground(in: .rect(cornerRadius: 20))
     }
 }
