@@ -15,10 +15,11 @@ import SwiftUI
 /// always draws its selection checkmark at the *leading* edge of the row, so
 /// pairing it with a "downloaded" bullet produced a cluttered
 /// `✓ ● Name` prefix on the selected row while every other row was `● Name` —
-/// the two markers collided and nothing lined up. Drawing both markers by
-/// hand keeps them on opposite sides:
-/// * `名称（类型）●` — the filled dot trails the name and means "downloaded";
-/// * `……✓` — the checkmark sits at the far trailing edge, meaning "selected".
+/// the two markers collided and nothing lined up.
+///
+/// Two signals, kept visually separate:
+/// * **downloaded** — the row's text is tinted blue;
+/// * **selected** — a checkmark at the far trailing edge.
 struct ModelPickerMenu: View {
     @Bindable var vm: ChatViewModel
 
@@ -31,16 +32,14 @@ struct ModelPickerMenu: View {
                 vm.selectedModel = model
             } label: {
                 HStack(spacing: 6) {
+                    // "Downloaded" is conveyed by the text colour — blue for a
+                    // model already on the device, plain for one that still
+                    // needs downloading. No extra glyph, so the row stays
+                    // quiet and the only symbol is the selection checkmark.
                     Text(label(for: model))
-
-                    // "Downloaded" marker sits just after the name; the
-                    // selection checkmark is pushed to the far trailing edge so
-                    // the two never sit next to each other.
-                    if downloadedNames.contains(model.name) {
-                        Image(systemName: "circle.fill")
-                            .font(.system(size: 6))
-                            .foregroundStyle(.secondary)
-                    }
+                        .foregroundStyle(
+                            downloadedNames.contains(model.name)
+                                ? Color.accentColor : Color.primary)
 
                     Spacer(minLength: 12)
 
