@@ -33,11 +33,65 @@ struct PromptField: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            // Row above the bar: leading glass control menu, then the
-            // reasoning toggle, with the plain context/memory readouts
-            // trailing. Deliberately outside the capsule so the bar itself
-            // stays a clean input strip.
+            // Row above the bar: the plain context/memory readouts sit on the
+            // leading side and the two glass chips (reasoning toggle, model
+            // menu) trail the edge. Deliberately outside the capsule so the
+            // bar itself stays a clean input strip.
             HStack(spacing: 8) {
+                // Reasoning toggle as its own glass button — three stars.
+                // Only meaningful for models that reason.
+                //
+                // On-state uses a *neutral, brighter* surface rather than a
+                // tinted one: tinting the glass blue while the glyph was also
+                // blue produced blue-on-blue, which read as a dim smudge
+                // instead of a lit control. A brighter fill plus a white glyph
+                // and a small dot indicator makes the state unmistakable
+                // regardless of the accent colour.
+                if vm.selectedModel.supportsThinking {
+                    Button {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
+                            vm.thinkingEnabled.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 15, weight: .semibold))
+                            if vm.thinkingEnabled {
+                                Image(systemName: "circle.fill")
+                                    .font(.system(size: 5))
+                            }
+                        }
+                        .foregroundStyle(vm.thinkingEnabled ? Color.white : Color.primary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Capsule())
+                    .glassEffect(
+                        vm.thinkingEnabled
+                            ? .regular.tint(.white).interactive()
+                            : .regular.interactive(),
+                        in: .capsule)
+                    .accessibilityLabel("推理模式")
+                    .accessibilityValue(vm.thinkingEnabled ? "已开启" : "已关闭")
+                }
+
+                // Grey, chrome-free readouts. The context figure recomputes
+                // only when a reply finishes (see
+                // ChatViewModel.settledRemainingTokens); the memory figure
+                // refreshes on its own two-second cadence.
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text("剩余上下文 · 约 \(vm.settledRemainingTokens) token")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+
+                    MemoryReadout()
+                }
+
+                Spacer(minLength: 0)
+
+                // Model-selection menu, on the trailing side next to the
+                // readouts so the chips read right-to-left from the edge.
                 Menu {
                     // No `Section` wrapper: a Section in a menu draws its own
                     // separator with an inset that does not line up with the
@@ -56,42 +110,7 @@ struct PromptField: View {
                 .buttonStyle(.plain)
                 .contentShape(Capsule())
                 .glassEffect(.regular.interactive(), in: .capsule)
-
-                // Reasoning toggle as its own glass button — three stars, lit
-                // when enabled. Only meaningful for models that reason.
-                if vm.selectedModel.supportsThinking {
-                    Button {
-                        vm.thinkingEnabled.toggle()
-                    } label: {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(vm.thinkingEnabled ? Color.accentColor : .primary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                    }
-                    .buttonStyle(.plain)
-                    .contentShape(Capsule())
-                    .glassEffect(
-                        vm.thinkingEnabled
-                            ? .regular.tint(.accentColor).interactive()
-                            : .regular.interactive(),
-                        in: .capsule)
-                    .accessibilityLabel("推理模式")
-                }
-
-                Spacer(minLength: 0)
-
-                // Grey, chrome-free readouts. The context figure recomputes
-                // only when a reply finishes (see
-                // ChatViewModel.settledRemainingTokens); the memory figure
-                // refreshes on its own two-second cadence.
-                VStack(alignment: .trailing, spacing: 1) {
-                    Text("剩余上下文 · 约 \(vm.settledRemainingTokens) token")
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
-
-                    MemoryReadout()
-                }
+                .accessibilityLabel("选择模型")
             }
             .padding(.horizontal, 4)
 

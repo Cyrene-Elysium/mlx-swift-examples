@@ -17,8 +17,8 @@ import SwiftUI
 /// `✓ ● Name` prefix on the selected row while every other row was `● Name` —
 /// the two markers collided and nothing lined up. Drawing both markers by
 /// hand keeps them on opposite sides:
-/// * a small filled dot *before* the name means "downloaded to this device";
-/// * a checkmark *after* the name means "currently selected".
+/// * `名称（类型）●` — the filled dot trails the name and means "downloaded";
+/// * `……✓` — the checkmark sits at the far trailing edge, meaning "selected".
 struct ModelPickerMenu: View {
     @Bindable var vm: ChatViewModel
 
@@ -31,16 +31,20 @@ struct ModelPickerMenu: View {
                 vm.selectedModel = model
             } label: {
                 HStack(spacing: 6) {
+                    Text(label(for: model))
+
+                    // "Downloaded" marker sits just after the name; the
+                    // selection checkmark is pushed to the far trailing edge so
+                    // the two never sit next to each other.
                     if downloadedNames.contains(model.name) {
                         Image(systemName: "circle.fill")
                             .font(.system(size: 6))
                             .foregroundStyle(.secondary)
                     }
 
-                    Text(label(for: model))
+                    Spacer(minLength: 12)
 
                     if model.id == vm.selectedModel.id {
-                        Spacer(minLength: 8)
                         Image(systemName: "checkmark")
                             .font(.footnote.weight(.semibold))
                     }
@@ -68,8 +72,8 @@ struct ModelPickerMenu: View {
         return downloaded + rest
     }
 
-    /// 模型显示文字：名称 + 类型标注。两个标记分别由圆点（前）和对勾（后）
-    /// 表达，互不干扰。
+    /// 模型显示文字：名称 + 类型标注。两个标记分别由圆点（名称右侧）和对勾
+    /// （行尾）表达，互不干扰。
     private func label(for model: LMModel) -> String {
         let kind = model.isVisionModel ? "视觉" : "文本"
         return "\(model.displayName)（\(kind)）"

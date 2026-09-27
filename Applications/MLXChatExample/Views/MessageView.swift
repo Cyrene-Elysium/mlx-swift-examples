@@ -201,7 +201,9 @@ struct ThinkingBox: View {
                 }
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: isStreaming ? "sparkles" : "sparkles")
+                    // Three-star glyph, shared with the prompt bar's reasoning
+                    // toggle so the two read as the same control.
+                    Image(systemName: "sparkles")
                         .font(.caption)
                         .foregroundStyle(isStreaming ? Color.accentColor : .secondary)
                         .symbolEffect(.variableColor.iterative, isActive: isStreaming)
