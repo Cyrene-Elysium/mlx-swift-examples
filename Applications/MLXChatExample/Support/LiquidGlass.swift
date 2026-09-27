@@ -30,19 +30,6 @@ extension View {
         glassEffect(.regular.interactive(), in: .capsule)
     }
 
-    /// Interactive Liquid Glass whose corners are concentric with the
-    /// device's screen curvature via `ConcentricRectangle`: each corner's
-    /// radius follows the container shape automatically — near the physical
-    /// screen edge it mirrors the device's corner radius — with a minimum
-    /// radius so corners never degenerate to square. Used by the home-screen
-    /// cards, which sit close enough to the screen edge that a large,
-    /// device-matched radius reads as intentional.
-    func deviceConcentricInteractiveGlassBackground(minimumRadius: CGFloat = 28) -> some View {
-        glassEffect(
-            .regular.interactive(),
-            in: ConcentricRectangle(corners: .concentric(minimum: minimumRadius), isUniform: true))
-    }
-
     /// Glass card that visibly reacts to a press.
     ///
     /// `glassEffect(.regular.interactive())` alone only tracks the *system*
