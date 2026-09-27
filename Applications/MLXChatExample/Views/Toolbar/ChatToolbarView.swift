@@ -17,6 +17,9 @@ struct ChatToolbarView: View {
     /// Confirm dialog for clearing the conversation.
     @State private var showsClearConfirmation = false
 
+    /// Names of models already downloaded, used to mark them in the picker.
+    @State private var downloadedNames: Set<String> = []
+
     var body: some View {
         // Display error message if present
         if let errorMessage = vm.errorMessage {
@@ -54,9 +57,33 @@ struct ChatToolbarView: View {
         // Model selection picker
         Picker("模型", selection: $vm.selectedModel) {
             ForEach(MLXService.availableModels) { model in
-                Text(model.displayName)
+                Text(pickerLabel(for: model))
                     .tag(model)
             }
         }
+        .task {
+            await refreshDownloadedNames()
+        }
+        .onChange(of: MLXService.shared.downloadingModelName) { _, newValue in
+            if newValue == nil {
+                Task { await refreshDownloadedNames() }
+            }
+        }
+    }
+
+    /// 模型选择器的显示文字：类型标注 + 已下载打勾。
+    private func pickerLabel(for model: LMModel) -> String {
+        let kind = model.isVisionModel ? "视觉" : "文本"
+        let check = downloadedNames.contains(model.name) ? " ✓" : ""
+        return "\(model.displayName)（\(kind)）\(check)"
+    }
+
+    /// 查询已下载的模型名集合。
+    private func refreshDownloadedNames() async {
+        var names = Set<String>()
+        for model in MLXService.availableModels where MLXService.shared.isDownloaded(model) {
+            names.insert(model.name)
+        }
+        downloadedNames = names
     }
 }

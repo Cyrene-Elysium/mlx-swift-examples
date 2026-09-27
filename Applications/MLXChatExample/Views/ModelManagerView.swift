@@ -7,6 +7,30 @@
 
 import SwiftUI
 
+/// 统一的模型类型图标：文本模型显示「文」，视觉模型显示眼睛图标。
+/// 模型管理页用它表达类型，取代原来的「文本模型 / 视觉模型」文字注释。
+struct ModelIcon: View {
+    let model: LMModel
+
+    var body: some View {
+        if model.isVisionModel {
+            Image(systemName: "eye")
+                .font(.title3)
+                .foregroundStyle(.tint)
+                .frame(width: 28)
+        } else {
+            Text("文")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.tint)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(.tint.opacity(0.14))
+                )
+        }
+    }
+}
+
 /// Lists all available models grouped by download state, lets the user delete
 /// downloaded model files to reclaim space, and selects the model used for new
 /// chats. Uses the iOS 27 Liquid Glass system materials via `.insetGrouped`.
@@ -29,14 +53,24 @@ struct ModelManagerView: View {
     /// on-disk byte count (more reliable than the hub's Progress object).
     @State private var downloadFraction: Double = 0
 
-    /// Models that have already been downloaded to this device.
+    /// Transfer speed of the in-flight download, in bytes per second.
+    @State private var downloadSpeed: Double = 0
+
+    /// Whether to show the download-failure alert.
+    @State private var showsDownloadError = false
+
+    /// Models that have already been downloaded to this device, sorted by name.
     private var downloadedModels: [LMModel] {
-        MLXService.availableModels.filter { downloadedSizes[$0.name] != nil }
+        MLXService.availableModels
+            .filter { downloadedSizes[$0.name] != nil }
+            .sorted { Self.modelSort($0, $1) }
     }
 
-    /// Models that are available to download but not yet on this device.
+    /// Models that are available to download but not yet on this device, sorted by name.
     private var notDownloadedModels: [LMModel] {
-        MLXService.availableModels.filter { downloadedSizes[$0.name] == nil }
+        MLXService.availableModels
+            .filter { downloadedSizes[$0.name] == nil }
+            .sorted { Self.modelSort($0, $1) }
     }
 
     var body: some View {
@@ -50,7 +84,7 @@ struct ModelManagerView: View {
                                     modelPendingDeletion = model
                                     showsDeleteConfirmation = true
                                 } label: {
-                                    Label("Delete", systemImage: "trash")
+                                    Label("删除", systemImage: "trash")
                                 }
                             }
                     }
@@ -73,7 +107,11 @@ struct ModelManagerView: View {
         .navigationTitle("模型")
         .task {
             await refreshDownloadedSizes()
-            // Continuously sample the download progress from on-disk bytes.
+            // Continuously sample download progress from on-disk bytes.
+            // 1s interval keeps directory enumeration from competing with the
+            // download for CPU/IO; speed comes from the byte delta between samples.
+            var lastBytes: Int64 = 0
+            var lastDate = Date()
             while !Task.isCancelled {
                 if let name = MLXService.shared.downloadingModelName,
                     let model = MLXService.availableModels.first(where: {
@@ -83,9 +121,21 @@ struct ModelManagerView: View {
                 {
                     let dir = MLXService.downloadDirectory(for: model)
                     let bytes = await MLXService.directorySize(at: dir)
+                    let now = Date()
+                    let elapsed = now.timeIntervalSince(lastDate)
+                    if elapsed > 0.5 {
+                        downloadSpeed = Double(bytes - lastBytes) / elapsed
+                        lastBytes = bytes
+                        lastDate = now
+                    }
                     downloadFraction = min(Double(bytes) / Double(total), 1.0)
+                } else {
+                    downloadFraction = 0
+                    downloadSpeed = 0
+                    lastBytes = 0
+                    lastDate = Date()
                 }
-                try? await Task.sleep(nanoseconds: 500_000_000)
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
             }
         }
         .refreshable {
@@ -96,6 +146,9 @@ struct ModelManagerView: View {
             if newValue == nil {
                 Task { await refreshDownloadedSizes() }
             }
+        }
+        .onChange(of: MLXService.shared.downloadError) { _, newValue in
+            showsDownloadError = newValue != nil
         }
         .confirmationDialog(
             "删除已下载的模型？",
@@ -114,6 +167,14 @@ struct ModelManagerView: View {
                 "将从本机删除该模型的文件，"
                     + "下次使用时会重新下载。"
             )
+        }
+        .alert(
+            "下载失败",
+            isPresented: $showsDownloadError
+        ) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(MLXService.shared.downloadError ?? "")
         }
         .alert(
             "删除失败",
@@ -147,10 +208,7 @@ struct ModelManagerView: View {
 
     private func modelRow(_ model: LMModel) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: model.isVisionModel ? "eye" : "character.textbox")
-                .font(.title3)
-                .foregroundStyle(.tint)
-                .frame(width: 28)
+            ModelIcon(model: model)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(model.displayName)
@@ -179,6 +237,23 @@ struct ModelManagerView: View {
                     }
                     .frame(width: 24, height: 24)
 
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("\(Int(downloadFraction * 100))%")
+                            .font(.caption.weight(.medium))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                        if downloadSpeed > 1_024 {
+                            Text(
+                                ByteCountFormatter.string(
+                                    fromByteCount: Int64(downloadSpeed),
+                                    countStyle: .file) + "/s"
+                            )
+                            .font(.caption2)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+
                     Button {
                         MLXService.shared.cancelDownload()
                     } label: {
@@ -188,6 +263,12 @@ struct ModelManagerView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                .transition(
+                    .asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .opacity
+                    )
+                )
             } else if downloadedSizes[model.name] == nil {
                 Button {
                     MLXService.shared.downloadModel(model)
@@ -197,8 +278,13 @@ struct ModelManagerView: View {
                         .foregroundStyle(.tint)
                 }
                 .buttonStyle(.plain)
+                .transition(.opacity)
             }
         }
+        .animation(
+            .spring(response: 0.3, dampingFraction: 0.8),
+            value: isDownloading(model)
+        )
         .padding(.vertical, 2)
     }
 
@@ -207,6 +293,12 @@ struct ModelManagerView: View {
     }
 
     // MARK: - Helpers
+
+    /// 模型排序：先按名称升序，名称相同再按体积从小到大。
+    private static func modelSort(_ a: LMModel, _ b: LMModel) -> Bool {
+        if a.name != b.name { return a.name < b.name }
+        return (a.estimatedSizeBytes ?? 0) < (b.estimatedSizeBytes ?? 0)
+    }
 
     private func statusLine(for model: LMModel) -> String {
         if isDownloading(model) {
@@ -217,13 +309,12 @@ struct ModelManagerView: View {
                 + ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
         }
 
-        let kind = model.isVisionModel ? "视觉模型" : "文本模型"
         if let estimate = model.estimatedSizeBytes {
             let size = ByteCountFormatter.string(
                 fromByteCount: estimate, countStyle: .file)
-            return "\(kind) · 未下载 · 约 \(size)"
+            return "未下载 · 约 \(size)"
         }
-        return "\(kind) · 未下载"
+        return "未下载"
     }
 
     private func refreshDownloadedSizes() async {

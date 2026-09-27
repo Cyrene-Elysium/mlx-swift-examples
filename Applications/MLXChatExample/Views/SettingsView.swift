@@ -39,7 +39,7 @@ struct SettingsView: View {
 
                 Picker("总结模型", selection: $summaryModelName) {
                     ForEach(MLXService.availableModels) { model in
-                        Text(model.displayName).tag(model.name)
+                        Text(summaryLabel(for: model)).tag(model.name)
                     }
                 }
                 .onChange(of: summaryModelName) { _, newValue in
@@ -71,6 +71,13 @@ struct SettingsView: View {
         .onAppear {
             personaDraft = ChisatoProfile.shared.persona
         }
+    }
+
+    /// 总结模型选择器的显示文字：类型标注 + 默认标识。
+    private func summaryLabel(for model: LMModel) -> String {
+        let kind = model.isVisionModel ? "视觉" : "文本"
+        let isDefault = model.name == "qwen3:4b"
+        return "\(model.displayName)（\(kind)）" + (isDefault ? "（默认）" : "")
     }
 
     /// Propagate persona changes to the dedicated Chisato conversation's

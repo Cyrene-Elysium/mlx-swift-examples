@@ -50,6 +50,10 @@ class MLXService {
     @MainActor
     private(set) var downloadingModelName: String?
 
+    /// Error from the most recent download attempt, if any.
+    @MainActor
+    private(set) var downloadError: String?
+
     /// In-flight download task, kept so the model manager can cancel it.
     @MainActor
     private var downloadTask: Task<Void, Error>?
@@ -117,12 +121,33 @@ class MLXService {
     func downloadModel(_ model: LMModel) {
         downloadTask?.cancel()
         downloadingModelName = model.name
+        downloadError = nil
         downloadTask = Task {
             defer {
                 downloadingModelName = nil
                 downloadTask = nil
             }
-            _ = try await load(model: model)
+            // swift-huggingface 的下载循环遇到网络错误会直接抛出、不自动重试，
+            // 网络一抖就会整体失败。这里做有限次重试（带退避）提升稳定性；
+            // 断点续传（Range）会让重试从已下载位置继续，不会从头下。
+            let maxAttempts = 3
+            for attempt in 1...maxAttempts {
+                do {
+                    _ = try await load(model: model)
+                    return
+                } catch {
+                    // 用户主动取消时不再重试、也不报错。
+                    if error is CancellationError || Task.isCancelled {
+                        return
+                    }
+                    if attempt == maxAttempts {
+                        self.downloadError = error.localizedDescription
+                        return
+                    }
+                    try? await Task.sleep(
+                        nanoseconds: UInt64(attempt) * 1_000_000_000)
+                }
+            }
         }
     }
 
@@ -134,6 +159,7 @@ class MLXService {
         modelDownloadProgress?.cancel()
         modelDownloadProgress = nil
         downloadingModelName = nil
+        downloadError = nil
     }
 
     /// Generates text based on the provided messages using the specified model.

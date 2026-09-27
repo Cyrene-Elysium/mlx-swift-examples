@@ -60,13 +60,12 @@ final class ChatSessionStore {
             MLXService.availableModels.first { $0.name == defaultModelName }
             ?? MLXService.availableModels.first!
 
-        let session = ChatSession(
+        // 新建会话不立即入库：等第一条消息发出（save()）时才真正持久化，
+        // 这样「新建后又退出」的空会话不会在列表里留下历史记录。
+        return ChatSession(
             modelName: model.name,
             messages: [.system("你是一个乐于助人的AI助手。")]
         )
-        sessions.insert(session, at: 0)
-        persist()
-        return session
     }
 
     /// Returns the dedicated 千束 conversation, creating it (with the current

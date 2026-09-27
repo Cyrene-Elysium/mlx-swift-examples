@@ -70,20 +70,21 @@ struct SessionListView: View {
 
             // The dedicated Chisato conversation lives behind the pinned card
             // above and is deliberately hidden from this list.
-            ForEach(store.sessions.filter { !$0.isChisato }) { session in
+            ForEach(store.sessions.filter { !$0.isChisato && !$0.isEmpty }) { session in
                 NavigationLink(value: session) {
                     SessionRowView(session: session)
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        store.delete(session)
+                    } label: {
+                        Label("删除", systemImage: "trash")
+                    }
                 }
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
                 .listRowInsets(
                     EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
-            }
-            .onDelete { offsets in
-                let visible = store.sessions.filter { !$0.isChisato }
-                for index in offsets {
-                    store.delete(visible[index])
-                }
             }
         }
         .listStyle(.plain)

@@ -101,10 +101,12 @@ struct ChatView: View {
                                 vm.thinkingEnabled.toggle()
                             } label: {
                                 Image(systemName: "sparkles")
-                                    .font(.subheadline)
+                                    .font(.title3)
                                     .foregroundStyle(
                                         vm.thinkingEnabled
                                             ? Color.accentColor : Color.secondary)
+                                    .frame(width: 44, height: 44)
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
                         }
@@ -120,8 +122,10 @@ struct ChatView: View {
                             Task { await vm.summarizeConversation() }
                         } label: {
                             Image(systemName: "rectangle.compress.vertical")
-                                .font(.subheadline)
+                                .font(.title3)
                                 .foregroundStyle(.tint)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .disabled(vm.isSummarizing)
