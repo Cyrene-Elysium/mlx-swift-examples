@@ -172,7 +172,8 @@ final class ChatSessionStore {
                             }
                         }(),
                         timestamp: message.timestamp,
-                        tokensPerSecond: message.tokensPerSecond
+                        tokensPerSecond: message.tokensPerSecond,
+                        thinking: message.thinking.isEmpty ? nil : message.thinking
                     )
                 },
                 modelName: session.modelName,
@@ -212,12 +213,19 @@ final class ChatSessionStore {
                         default: .system
                         }
 
-                    return Message(
+                    let restored = Message(
                         role: role,
                         content: message.content,
                         images: message.images.map { mediaDir.appending(path: $0) },
                         tokensPerSecond: message.tokensPerSecond
                     )
+                    // A restored reply is a finished reply: attach any stored
+                    // reasoning trace and mark the thinking phase complete so
+                    // the box renders in its collapsed, settled state.
+                    restored.thinking = message.thinking ?? ""
+                    restored.thinkingFinished = true
+                    restored.thinkingDecided = true
+                    return restored
                 }
 
                 return ChatSession(

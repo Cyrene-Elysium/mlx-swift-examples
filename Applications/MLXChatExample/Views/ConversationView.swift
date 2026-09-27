@@ -15,6 +15,9 @@ struct ConversationView: View {
     /// Whether this is the dedicated Chisato conversation (shows her avatar).
     let isChisato: Bool
 
+    /// Settings toggle: expand the thinking box while reasoning streams.
+    var liveThinkingExpansion: Bool = true
+
     /// Called when the user deletes a single message.
     var onDelete: ((Message) -> Void)?
 
@@ -25,7 +28,9 @@ struct ConversationView: View {
                 // and must never be rendered in the conversation.
                 ForEach(messages.filter { $0.role != .system }) { message in
                     MessageView(
-                        message, showsChisatoAvatar: isChisato, onDelete: onDelete)
+                        message, showsChisatoAvatar: isChisato,
+                        liveThinkingExpansion: liveThinkingExpansion,
+                        onDelete: onDelete)
                     .padding(.horizontal, 12)
                 }
             }

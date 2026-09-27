@@ -61,7 +61,11 @@ struct SessionListView: View {
             } label: {
                 ChisatoEntryCard()
             }
-            .buttonStyle(.plain)
+            .buttonStyle(
+                GlassPressButtonStyle(
+                    shape: AnyShape(
+                        ConcentricRectangle(
+                            corners: .concentric(minimum: 28), isUniform: true))))
             .contentShape(Rectangle())
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
@@ -81,6 +85,11 @@ struct SessionListView: View {
                         Label("删除", systemImage: "trash")
                     }
                 }
+                .buttonStyle(
+                    GlassPressButtonStyle(
+                        shape: AnyShape(
+                            ConcentricRectangle(
+                                corners: .concentric(minimum: 28), isUniform: true))))
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
                 .listRowInsets(
@@ -119,7 +128,6 @@ struct ChisatoEntryCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .contentShape(Rectangle())
-        .interactiveGlassBackground(in: .rect(cornerRadius: 20))
     }
 }
 
@@ -150,7 +158,6 @@ struct SessionRowView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .interactiveGlassBackground(in: .rect(cornerRadius: 20))
     }
 }
 

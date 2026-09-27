@@ -92,4 +92,7 @@ struct MessageRecord: Codable {
     var role: String
     var timestamp: Date
     var tokensPerSecond: Double?
+    /// Reasoning trace, when the reply had one. Optional so archives written
+    /// before this field existed still decode cleanly.
+    var thinking: String?
 }

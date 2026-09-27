@@ -5,6 +5,7 @@
 //  Created by İbrahim Çetin on 20.04.2025.
 //
 
+import Darwin
 import Foundation
 import HuggingFace
 import Hub
@@ -78,6 +79,18 @@ class MLXService {
     @MainActor
     private var speedSamples: [String: (completed: Int64, date: Date)] = [:]
 
+    /// Recent instantaneous speed samples per model, averaged into a stable
+    /// readout. Raw per-100ms deltas swing wildly (they carry URLSession
+    /// buffering jitter), so a short sliding window is what the UI shows.
+    @MainActor
+    private var speedWindows: [String: [Double]] = [:]
+
+    /// Last time the speed readout was refreshed, per model. The UI only needs
+    /// about one update per second; refreshing more often is what made the
+    /// number visibly flicker.
+    @MainActor
+    private var speedLastRefreshed: [String: Date] = [:]
+
     /// Names of models currently resident in the in-memory cache. `NSCache`
     /// cannot be enumerated, so this set is maintained alongside it — it is
     /// what memory-pressure eviction operates on.
@@ -113,7 +126,7 @@ class MLXService {
             let isNew = activeDownloads[model.name] == nil
             if isNew {
                 activeDownloads[model.name] = DownloadState()
-                speedSamples[model.name] = nil
+                resetSpeedTracking(for: model.name)
             }
             return isNew
         }
@@ -123,7 +136,7 @@ class MLXService {
             if ownsTracking {
                 await MainActor.run {
                     activeDownloads[model.name] = nil
-                    speedSamples[model.name] = nil
+                    resetSpeedTracking(for: model.name)
                 }
             }
             return container
@@ -131,7 +144,7 @@ class MLXService {
             if ownsTracking {
                 await MainActor.run {
                     activeDownloads[model.name] = nil
-                    speedSamples[model.name] = nil
+                    resetSpeedTracking(for: model.name)
                 }
             }
             throw error
@@ -223,19 +236,49 @@ class MLXService {
         let now = Date()
         if let last = shared.speedSamples[name] {
             let dt = now.timeIntervalSince(last.date)
-            if dt > 0.05 {
-                let instantaneous = Double(completed - last.completed) / dt
-                state.speed =
-                    state.speed <= 0
-                    ? max(instantaneous, 0)
-                    : max(state.speed * 0.6 + instantaneous * 0.4, 0)
+            // Skip re-sampling on sub-100ms callbacks: the delta would be a
+            // rounding artifact and destabilise the average.
+            if dt > 0.1 {
+                let instantaneous = max(Double(completed - last.completed) / dt, 0)
+                shared.speedSamples[name] = (completed, now)
+
+                // Sliding window of the last few samples smooths the buffering
+                // jitter out. Bytes here are derived from the fraction, so a
+                // stalled read lands as a 0 in the window instead of a wild
+                // spike.
+                var window = shared.speedWindows[name] ?? []
+                window.append(instantaneous)
+                if window.count > 5 { window.removeFirst() }
+                shared.speedWindows[name] = window
+
+                // Refresh the published readout at most once per second —
+                // a per-callback refresh is what made the number flicker.
+                let lastRefresh = shared.speedLastRefreshed[name]
+                let shouldRefresh =
+                    lastRefresh == nil || now.timeIntervalSince(lastRefresh!) >= 1.0
+                if shouldRefresh, !window.isEmpty {
+                    state.speed = window.reduce(0, +) / Double(window.count)
+                    shared.speedLastRefreshed[name] = now
+                }
             }
+        } else {
+            shared.speedSamples[name] = (completed, now)
         }
-        shared.speedSamples[name] = (completed, now)
 
         state.completedBytes = completed
         state.fraction = fraction
         shared.activeDownloads[name] = state
+    }
+
+    /// Drops every per-download bookkeeping entry for a model: the speed
+    /// sampling cursor, the averaging window, and the throttle stamp. Called
+    /// whenever a download starts, finishes, or is cancelled so a later
+    /// download never averages against stale samples.
+    @MainActor
+    private func resetSpeedTracking(for name: String) {
+        speedSamples[name] = nil
+        speedWindows[name] = nil
+        speedLastRefreshed[name] = nil
     }
 
     // MARK: - Download control
@@ -263,13 +306,13 @@ class MLXService {
         }
 
         activeDownloads[name] = DownloadState()
-        speedSamples[name] = nil
+        resetSpeedTracking(for: name)
 
         downloadTasks[name] = Task {
             defer {
                 downloadTasks[name] = nil
                 activeDownloads[name] = nil
-                speedSamples[name] = nil
+                resetSpeedTracking(for: name)
                 endBackgroundTask(for: name)
             }
             // swift-huggingface's download loop throws on network errors
@@ -300,7 +343,7 @@ class MLXService {
         downloadTasks[model.name]?.cancel()
         downloadTasks[model.name] = nil
         activeDownloads[model.name] = nil
-        speedSamples[model.name] = nil
+        resetSpeedTracking(for: model.name)
         downloadErrors[model.name] = nil
     }
 
@@ -437,6 +480,19 @@ class MLXService {
         )
     }
 
+    /// Unloads every loaded model and clears the MLX buffer cache **without**
+    /// posting a notification. Used before loading the summary model during
+    /// conversation compression so the resident conversation model and the
+    /// summary model don't occupy memory simultaneously — on memory-tight
+    /// devices that coexistence jetsams the app (seen as a crash after a few
+    /// seconds of the summarize spinner). The next chat re-loads on demand.
+    @MainActor
+    func unloadAllModelsSilently() {
+        loadedModelNames.removeAll()
+        modelCache.removeAllObjects()
+        Memory.clearCache()
+    }
+
     /// Clamps the MLX buffer cache while backgrounded so the resident
     /// footprint stays small (see mlx-swift's running-on-ios guidance).
     @MainActor
@@ -449,6 +505,46 @@ class MLXService {
             Memory.cacheLimit = Int(
                 min(max(quarter, UInt64(512 * 1024 * 1024)), UInt64(4 * 1024 * 1024 * 1024)))
         }
+    }
+
+    /// Tightens the MLX buffer cache while a conversation summary is being
+    /// generated. Summarization loads a second multi-GB model right after the
+    /// chat model was dropped; clamping the cache keeps the transient
+    /// activation buffers from pushing the app over the jetsam limit during
+    /// that handover window. Restored to the normal sizing afterwards.
+    @MainActor
+    func setSummarizing(_ summarizing: Bool) {
+        if summarizing {
+            Memory.cacheLimit = 128 * 1024 * 1024
+        } else {
+            let physicalMemory = ProcessInfo.processInfo.physicalMemory
+            let quarter = physicalMemory / 4
+            Memory.cacheLimit = Int(
+                min(max(quarter, UInt64(512 * 1024 * 1024)), UInt64(4 * 1024 * 1024 * 1024)))
+        }
+    }
+
+    /// Current resident memory footprint of this process in bytes, as
+    /// reported by the kernel (`phys_footprint`). This is the figure jetsam
+    /// kills on, so it is the honest one to surface in the UI.
+    nonisolated static func residentMemoryBytes() -> Int64 {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { return 0 }
+        return Int64(info.phys_footprint)
+    }
+
+    /// Bytes currently held by MLX's own buffer cache (the reusable scratch
+    /// pool, not model weights). Letting the user see this explains why the
+    /// footprint can sit well above the model size on disk.
+    nonisolated static func mlxCacheBytes() -> Int64 {
+        Int64(Memory.snapshot().cacheMemory)
     }
 
     // MARK: - Download management

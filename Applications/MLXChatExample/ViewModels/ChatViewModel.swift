@@ -34,6 +34,9 @@ class ChatViewModel {
             ?? MLXService.availableModels.first!
         self.thinkingEnabled =
             UserDefaults.standard.object(forKey: "thinkingEnabled") as? Bool ?? true
+        self.expandThinkingLive =
+            UserDefaults.standard.object(forKey: "expandThinkingLive") as? Bool ?? true
+        self.settledRemainingTokens = remainingTokens
     }
 
     /// Current user input text
@@ -49,6 +52,9 @@ class ChatViewModel {
         didSet {
             session.modelName = selectedModel.name
             store.defaultModelName = selectedModel.name
+            // Context budget changed with the model — restate it at once so
+            // the readout does not show a number for the previous model.
+            settleRemainingTokens()
         }
     }
 
@@ -64,10 +70,23 @@ class ChatViewModel {
     }
 
     /// 剩余上下文的粗略估算（token 数）。用字符数折半近似，仅供提示，
-    /// 标注「约」使用。
+    /// 标注「约」使用。每次访问都重算——用于「是否接近上限」这类需要即时
+    /// 判断的场合。
     var remainingTokens: Int {
         let used = session.messages.reduce(0) { $0 + $1.content.count / 2 }
         return max(selectedModel.contextLength - used, 0)
+    }
+
+    /// 展示用的剩余上下文，**仅在每次回复结束后结算**。
+    ///
+    /// Streaming 期间逐 chunk 重算会让这个数字不停跳动，读起来像噪声；
+    /// 用户在整段输出完成后才关心它。所以这里读的是 `settledRemainingTokens`
+    /// 缓存值，由 `generate()` 在收尾时（以及切换模型、清空对话时）刷新。
+    private(set) var settledRemainingTokens: Int = 0
+
+    /// 重新结算展示用的剩余上下文。
+    func settleRemainingTokens() {
+        settledRemainingTokens = remainingTokens
     }
 
     /// 是否接近上下文上限（剩余 < 20%），用于触发总结提示。
@@ -93,6 +112,20 @@ class ChatViewModel {
     /// Indicates if text generation is in progress
     var isGenerating = false
 
+    /// True while the model is emitting its reasoning trace (inside the
+    /// `…` block) and has not yet started the answer. Drives the live
+    /// "正在思考" state of the thinking box.
+    var isThinking = false
+
+    /// Whether the thinking box expands while reasoning streams in. When
+    /// false it stays collapsed and shows only a status line. Persisted via
+    /// UserDefaults; toggled from Settings.
+    var expandThinkingLive: Bool {
+        didSet {
+            UserDefaults.standard.set(expandThinkingLive, forKey: "expandThinkingLive")
+        }
+    }
+
     /// Current generation task, used for cancellation
     private var generateTask: Task<Void, any Error>?
 
@@ -116,6 +149,7 @@ class ChatViewModel {
         }
 
         isGenerating = true
+        isThinking = false
 
         // Auto-title the session from the first real user message
         let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -152,9 +186,14 @@ class ChatViewModel {
             {
                 switch generation {
                 case .chunk(let chunk):
-                    // Append new text to the current assistant message
+                    // Route incoming text into the assistant message, splitting
+                    // the Qwen3 reasoning block (`…`) away from the
+                    // answer so each gets its own surface. The split is done
+                    // incrementally on the raw accumulated text: everything
+                    // before the closing marker is reasoning, everything after
+                    // is the answer.
                     if let assistantMessage = session.messages.last {
-                        assistantMessage.content += chunk
+                        self.route(chunk: chunk, into: assistantMessage)
                     }
                 case .info(let info):
                     // Update performance metrics and stamp this reply's speed
@@ -189,6 +228,10 @@ class ChatViewModel {
 
         isGenerating = false
         generateTask = nil
+
+        // Settle the context readout once, after the whole reply has landed —
+        // not on every streamed chunk, which would make it flicker.
+        settleRemainingTokens()
 
         store.save(session)
     }
@@ -239,6 +282,10 @@ class ChatViewModel {
             generateCompletionInfo = nil
         }
 
+        // Anything that rewrites the history changes the context budget —
+        // restate it now so the readout never lags the conversation.
+        settleRemainingTokens()
+
         errorMessage = nil
     }
 
@@ -276,8 +323,28 @@ class ChatViewModel {
             if bgID != .invalid { UIApplication.shared.endBackgroundTask(bgID) }
         }
 
+        // Free the resident conversation model + MLX buffers *before* loading
+        // the summary model. Otherwise the two multi-GB models coexist in
+        // memory and the system jetsams the app (observed as a crash after a
+        // few seconds of the summarize spinner). The next chat re-loads on demand.
+        //
+        // Order matters: drop the containers and drain the MLX buffer cache
+        // first, then clamp the cache limit so the summary model's transient
+        // activations cannot balloon while the conversation model's weights
+        // are still being reclaimed by the system. The limit is restored in
+        // the defer below once the summary lands.
+        MLXService.shared.unloadAllModelsSilently()
+        MLXService.shared.setSummarizing(true)
+        defer { MLXService.shared.setSummarizing(false) }
+
         let nonSystem = session.messages.filter { $0.role != .system }
         guard !nonSystem.isEmpty else { return }
+
+        // 摘要模型未下载时直接提示，避免压缩时静默触发数 GB 下载。
+        if !MLXService.shared.isDownloaded(summaryModel) {
+            errorMessage = "摘要模型（\(summaryModel.name)）尚未下载，无法压缩上下文。请先在「模型」管理中下载它。"
+            return
+        }
 
         do {
             let summary = try await generateSummary(history: nonSystem)
@@ -290,6 +357,57 @@ class ChatViewModel {
         } catch {
             errorMessage = "总结失败：\(error.localizedDescription)"
         }
+    }
+
+    /// 把流式 chunk 追加到助手消息，同时把 Qwen3 的思考块
+    /// （`…`）从正文中剥离出来。
+    ///
+    /// 标记取自 Qwen3 的 chat template（实测其 tokenizer_config 用的是
+    /// 普通尖括号 `<think>` / `</think>`，不是带特殊 Unicode 的形式）。
+    /// 协议没有独立的 reasoning 通道（`Generation` 只有 `.chunk`），所以只能
+    /// 对累积文本做切分：
+    /// - 文本以 `<think>` 开头 → 处于思考阶段，累积进 `thinking`；
+    /// - 见到 `</think>` → 思考结束，标记定型，后续进 `content`；
+    /// - 文本不以 `<think>` 开头（非思考模型，或 /no_think 直接作答）→
+    ///   立刻判定无思考内容，全部进 `content`。
+    private func route(chunk: String, into message: Message) {
+        // Already past the reasoning phase — everything is answer text.
+        if message.thinkingFinished {
+            message.content += chunk
+            return
+        }
+
+        // First chunk decides the mode: only a leading `<think>` opener puts
+        // us in the reasoning branch. Anything else is a normal answer.
+        if !message.thinkingDecided {
+            message.thinkingDecided = true
+            let probe = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !probe.hasPrefix("<think>") {
+                message.thinkingFinished = true
+                message.content += chunk
+                isThinking = false
+                return
+            }
+        }
+
+        // Accumulate raw text and look for the closing marker.
+        message.thinking += chunk
+
+        guard let range = message.thinking.range(of: "</think>") else {
+            // Still inside the reasoning block.
+            isThinking = true
+            return
+        }
+
+        // Split at the marker: before → thinking, after → answer.
+        let reasoning = String(message.thinking[..<range.lowerBound])
+        let answer = String(message.thinking[range.upperBound...])
+        message.thinking = reasoning
+            .replacingOccurrences(of: "<think>", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        message.content = answer
+        message.thinkingFinished = true
+        isThinking = false
     }
 
     /// 从最旧的非 system 消息开始丢弃，直到回到 80% 以内。

@@ -8,9 +8,9 @@
 import SwiftUI
 
 /// Toolbar content for the chat interface: error indicator, download
-/// progress for the selected model, summarize-context, and clear-conversation.
-/// Model selection and the thinking toggle moved into the prompt bar's
-/// control menu; generation-related defaults live in Settings.
+/// progress for the selected model, a "more" menu (compress / clear), and a
+/// live memory readout. Model selection and the thinking toggle live in the
+/// prompt bar's leading menu; generation-related defaults live in Settings.
 ///
 /// `ToolbarContent` bodies are not main-actor isolated, so every conditional
 /// lives inside a small subview (whose `body` is).
@@ -27,11 +27,11 @@ struct ChatToolbarView: ToolbarContent {
         }
 
         ToolbarItem(placement: .primaryAction) {
-            ChatToolbarSummarizeButton(vm: vm)
+            ChatToolbarMemoryReadout()
         }
 
         ToolbarItem(placement: .primaryAction) {
-            ChatToolbarClearButton(vm: vm)
+            ChatToolbarMoreMenu(vm: vm)
         }
     }
 }
@@ -58,33 +58,57 @@ private struct ChatToolbarDownloadItem: View {
     }
 }
 
-/// Summarize (compress) the conversation context on demand.
-private struct ChatToolbarSummarizeButton: View {
-    @Bindable var vm: ChatViewModel
+/// Live resident-memory readout, refreshed every two seconds. Shows the
+/// kernel's physical footprint — the figure the system jetsams on — in a
+/// compact, secondary style so it reads as instrumentation, not a control.
+private struct ChatToolbarMemoryReadout: View {
+    @State private var bytes: Int64 = 0
+
+    /// Two-second cadence for the readout.
+    private let timer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        Button {
-            Task { await vm.summarizeConversation() }
-        } label: {
-            Image(systemName: "rectangle.compress.vertical")
-                .foregroundStyle(.tint)
-        }
-        .disabled(vm.isSummarizing)
+        Text(formatted)
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.secondary)
+            .onAppear { refresh() }
+            .onReceive(timer) { _ in refresh() }
+    }
+
+    private func refresh() {
+        bytes = MLXService.residentMemoryBytes()
+    }
+
+    private var formatted: String {
+        guard bytes > 0 else { return "—" }
+        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .memory)
     }
 }
 
-/// Clear chat history (explicit, with confirmation), as its own toolbar item.
-private struct ChatToolbarClearButton: View {
+/// Overflow menu holding the conversation-level actions (compress context,
+/// clear history) that used to occupy their own toolbar buttons.
+private struct ChatToolbarMoreMenu: View {
     @Bindable var vm: ChatViewModel
 
     @State private var showsClearConfirmation = false
 
     var body: some View {
-        Button {
-            showsClearConfirmation = true
+        Menu {
+            Button {
+                Task { await vm.summarizeConversation() }
+            } label: {
+                Label("压缩上下文", systemImage: "rectangle.compress.vertical")
+            }
+            .disabled(vm.isSummarizing)
+
+            Button(role: .destructive) {
+                showsClearConfirmation = true
+            } label: {
+                Label("清空对话", systemImage: "trash")
+            }
         } label: {
-            Image(systemName: "trash")
-                .foregroundStyle(.red)
+            Image(systemName: "ellipsis.circle")
+                .foregroundStyle(.tint)
         }
         .confirmationDialog(
             "清空当前对话？",

@@ -22,14 +22,20 @@ struct MessageView: View {
     /// delete action.
     let onDelete: ((Message) -> Void)?
 
+    /// Whether the thinking box expands while reasoning streams in. Mirrors
+    /// the Settings toggle so already-rendered messages react to it too.
+    var liveThinkingExpansion: Bool = true
+
     /// Creates a message view
     /// - Parameter message: The message model to display
     init(
         _ message: Message, showsChisatoAvatar: Bool = false,
+        liveThinkingExpansion: Bool = true,
         onDelete: ((Message) -> Void)? = nil
     ) {
         self.message = message
         self.showsChisatoAvatar = showsChisatoAvatar
+        self.liveThinkingExpansion = liveThinkingExpansion
         self.onDelete = onDelete
     }
 
@@ -105,6 +111,14 @@ struct MessageView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
+                // Reasoning trace gets its own collapsible box so the answer
+                // below reads clean. Auto-expands while it streams, auto-
+                // collapses once the answer starts (unless the user disabled
+                // live expansion in Settings).
+                if !message.thinking.isEmpty {
+                    ThinkingBox(message: message, liveExpansion: liveThinkingExpansion)
+                }
+
                 // LocalizedStringKey used to trigger default handling of markdown content.
                 Text(LocalizedStringKey(message.content))
                     .textSelection(.enabled)
@@ -144,4 +158,75 @@ struct MessageView: View {
         MessageView(.assistant("I see your photo!"))
     }
     .padding()
+}
+
+/// Collapsible box holding a reply's reasoning trace.
+///
+/// While the model is still thinking the box can auto-expand so the user can
+/// watch it work; as soon as the answer starts it collapses to a one-line
+/// summary. When live expansion is disabled in Settings, it stays collapsed
+/// and shows only the status line ("正在思考" / "思考完成").
+struct ThinkingBox: View {
+    let message: Message
+
+    /// Settings toggle: expand while reasoning is streaming.
+    let liveExpansion: Bool
+
+    /// User's manual override, applied on top of the automatic behaviour.
+    @State private var manualExpanded: Bool?
+
+    private var isStreaming: Bool {
+        !message.thinkingFinished && !message.thinking.isEmpty
+    }
+
+    /// Auto state: expanded while thinking (if allowed), collapsed after.
+    private var autoExpanded: Bool {
+        isStreaming && liveExpansion
+    }
+
+    private var isExpanded: Bool {
+        manualExpanded ?? autoExpanded
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    manualExpanded = !isExpanded
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: isStreaming ? "brain" : "brain.fill")
+                        .font(.caption)
+                    Text(statusText)
+                        .font(.caption.weight(.medium))
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .foregroundStyle(.secondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded && !message.thinking.isEmpty {
+                Divider().padding(.vertical, 6)
+                Text(message.thinking)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.quaternary.opacity(0.4), in: .rect(cornerRadius: 10))
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: message.thinkingFinished)
+    }
+
+    private var statusText: String {
+        if isStreaming { return "正在思考" }
+        return "思考完成"
+    }
 }

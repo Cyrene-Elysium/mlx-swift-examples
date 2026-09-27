@@ -80,6 +80,7 @@ struct ChatView: View {
         // content scrolls beneath the Liquid Glass material.
         ConversationView(
             messages: vm.messages, isChisato: vm.session.isChisato,
+            liveThinkingExpansion: vm.expandThinkingLive,
             onDelete: vm.deleteMessage
         )
             .contentShape(Rectangle())

@@ -20,6 +20,23 @@ class Message: Identifiable {
     /// The text content of the message
     var content: String
 
+    /// Reasoning trace produced before the answer, when the model exposes one
+    /// (Qwen3's `…` block). Rendered in its own collapsible box so the
+    /// answer itself stays clean. Empty for user/system messages and for
+    /// models that do not think.
+    var thinking: String = ""
+
+    /// Whether the reasoning phase has ended and `content` is now the answer.
+    /// Set once the closing thinking marker is seen; drives the live collapse
+    /// of the thinking box. Starts `false` for a fresh assistant message so
+    /// incoming chunks are treated as reasoning until the marker arrives;
+    /// messages that never think simply flip it on the first chunk.
+    var thinkingFinished: Bool = false
+
+    /// Whether the first chunk has been inspected to decide whether this
+    /// reply reasons at all. Prevents re-checking the opener on every chunk.
+    var thinkingDecided: Bool = false
+
     /// Array of image URLs attached to the message
     var images: [URL]
 

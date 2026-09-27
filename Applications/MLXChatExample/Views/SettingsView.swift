@@ -15,6 +15,10 @@ struct SettingsView: View {
     @State private var kvCacheQuantized =
         UserDefaults.standard.object(forKey: "kvCacheQuantized") as? Bool ?? true
 
+    /// Whether the thinking box expands while reasoning streams in.
+    @State private var expandThinkingLive =
+        UserDefaults.standard.object(forKey: "expandThinkingLive") as? Bool ?? true
+
     /// Model used to summarize conversations (default qwen3:4b).
     @State private var summaryModelName =
         UserDefaults.standard.string(forKey: "summaryModelName") ?? "qwen3:4b"
@@ -40,6 +44,18 @@ struct SettingsView: View {
                     UserDefaults.standard.set(newValue, forKey: "kvCacheQuantized")
                 }
 
+                Toggle(isOn: $expandThinkingLive) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("思考时默认展开")
+                        Text("开启后模型推理过程实时展开显示；关闭则只在思考框中提示「正在思考」")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .onChange(of: expandThinkingLive) { _, newValue in
+                    UserDefaults.standard.set(newValue, forKey: "expandThinkingLive")
+                }
+
                 Picker("总结模型", selection: $summaryModelName) {
                     ForEach(sortedModels) { model in
                         Text(summaryLabel(for: model)).tag(model.name)
@@ -52,7 +68,7 @@ struct SettingsView: View {
 
             Section("千束的人设与记忆") {
                 TextEditor(text: $personaDraft)
-                    .frame(height: 240)
+                    .frame(height: 208)
             }
 
             Section {

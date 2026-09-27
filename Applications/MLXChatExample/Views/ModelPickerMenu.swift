@@ -8,8 +8,13 @@
 import SwiftUI
 
 /// The model-selection menu content used inside the prompt bar's control
-/// menu: downloaded models first (marked ✓), then the rest, each group
-/// sorted by name then size. Rendered as a submenu inside `Menu`.
+/// menu: downloaded models first, then the rest, each group sorted by name
+/// then size.
+///
+/// The two markers are deliberately distinct so they can't be confused:
+/// * a small filled dot *before* the name means "downloaded to this device";
+/// * the system checkmark *after* the name means "currently selected"
+///   (rendered by `Picker` for the selected row).
 struct ModelPickerMenu: View {
     @Bindable var vm: ChatViewModel
 
@@ -19,8 +24,11 @@ struct ModelPickerMenu: View {
     var body: some View {
         Picker("模型", selection: $vm.selectedModel) {
             ForEach(sortedModels) { model in
-                Text(pickerLabel(for: model))
-                    .tag(model)
+                downloadedNames.contains(model.name)
+                    ? Text(
+                        "● \(pickerLabel(for: model))"
+                    ).tag(model)
+                    : Text(pickerLabel(for: model)).tag(model)
             }
         }
         .task {
@@ -44,11 +52,11 @@ struct ModelPickerMenu: View {
         return downloaded + rest
     }
 
-    /// 模型选择器的显示文字：类型标注 + 已下载打勾。
+    /// 模型选择器的显示文字：名称 + 类型标注。已下载标识由调用方在名称前
+    /// 用圆点表达，选中标识由 Picker 在名称右侧画对勾——两者互不干扰。
     private func pickerLabel(for model: LMModel) -> String {
         let kind = model.isVisionModel ? "视觉" : "文本"
-        let check = downloadedNames.contains(model.name) ? " ✓" : ""
-        return "\(model.displayName)（\(kind)）\(check)"
+        return "\(model.displayName)（\(kind)）"
     }
 
     /// 查询已下载的模型名集合。

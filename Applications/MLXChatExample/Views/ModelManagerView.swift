@@ -170,6 +170,8 @@ struct ModelManagerView: View {
         }
         .font(.subheadline)
         .foregroundStyle(.secondary)
+        // Same separator origin as the model rows: the label text column.
+        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] + 40 }
     }
 
     // MARK: - Rows
@@ -178,6 +180,10 @@ struct ModelManagerView: View {
         HStack(spacing: 12) {
             ModelIcon(model: model)
 
+            // The separator's leading edge is taken straight from this column's
+            // real leading edge, so it lines up with the model name in every
+            // section regardless of the row's insets — no magic-number offset
+            // that could drift when the icon or spacing changes.
             VStack(alignment: .leading, spacing: 4) {
                 Text(model.displayName)
                     .font(.headline)
@@ -186,6 +192,7 @@ struct ModelManagerView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+            .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
 
             Spacer()
 
@@ -252,9 +259,6 @@ struct ModelManagerView: View {
             value: MLXService.shared.activeDownloads[model.name] != nil
         )
         .padding(.vertical, 2)
-        // Align every row's separator with the text column so the dividers
-        // form one straight line instead of following each row's content.
-        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] + 40 }
     }
 
     // MARK: - Helpers

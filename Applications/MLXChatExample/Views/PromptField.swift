@@ -9,12 +9,13 @@ import SwiftUI
 
 /// Floating prompt input bar rendered with the Liquid Glass material.
 /// The glass background lets conversation content refract through as it
-/// scrolls beneath the bar, and follows the device's screen corner
-/// curvature (`ConcentricRectangle`) with an interactive press highlight.
+/// scrolls beneath the bar. The bar keeps a capsule silhouette — the shape
+/// it has always had — rather than a rounded rectangle, so the ends stay
+/// fully semicircular.
 ///
-/// The leading control menu holds what used to sit in the top toolbar and
-/// the strip above the bar: model selection, the thinking toggle, and the
-/// remaining-context readout.
+/// Above the bar sit two separate elements, as requested: the leading glass
+/// control button (model selection + thinking toggle) on the left, and a
+/// plain grey remaining-context readout on the right.
 struct PromptField: View {
     @Binding var prompt: String
     @State private var task: Task<Void, Never>?
@@ -23,86 +24,100 @@ struct PromptField: View {
     /// keyboard (on send, or when the conversation is tapped).
     var isInputFocused: FocusState<Bool>.Binding
 
-    /// View model providing the model selection, thinking toggle and
-    /// context readout surfaced in the control menu.
+    /// View model providing the model selection and thinking toggle surfaced
+    /// in the leading control menu.
     @Bindable var vm: ChatViewModel
 
     let sendButtonAction: () async -> Void
     let mediaButtonAction: (() -> Void)?
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Control menu: model selection (submenu), thinking mode, and
-            // the remaining-context readout — all tucked into the bar.
-            Menu {
-                Section {
-                    ModelPickerMenu(vm: vm)
-                }
-
-                if vm.selectedModel.supportsThinking {
+        VStack(spacing: 6) {
+            // Row above the bar: leading glass control menu, trailing plain
+            // context readout. Deliberately outside the capsule so the bar
+            // itself stays a clean input strip.
+            HStack(spacing: 8) {
+                Menu {
                     Section {
-                        Toggle("思考模式", isOn: $vm.thinkingEnabled)
+                        ModelPickerMenu(vm: vm)
                     }
-                }
 
-                Section {
-                    Label(
-                        "剩余上下文 · 约 \(vm.remainingTokens) token",
-                        systemImage: "chart.bar.doc.horizontal"
-                    )
-                    .foregroundStyle(.secondary)
-                }
-            } label: {
-                Image(systemName: "slider.horizontal.2")
-                    .font(.title3)
-                    .foregroundStyle(.tint)
-            }
-            .buttonStyle(.glass)
-
-            if let mediaButtonAction {
-                Button(action: mediaButtonAction) {
-                    Image(systemName: "photo.badge.plus")
-                        .font(.title3)
+                    if vm.selectedModel.supportsThinking {
+                        Section {
+                            Toggle("推理模式", isOn: $vm.thinkingEnabled)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "slider.horizontal.2")
+                        .font(.subheadline)
                         .foregroundStyle(.tint)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.plain)
+                .contentShape(Capsule())
+                .glassEffect(.regular.interactive(), in: .capsule)
+
+                Spacer(minLength: 0)
+
+                // Grey, chrome-free readout. Recomputed only when a reply
+                // finishes (see ChatViewModel.settledRemainingTokens), not on
+                // every streamed chunk.
+                Text("剩余上下文 · 约 \(vm.settledRemainingTokens) token")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
             }
+            .padding(.horizontal, 4)
 
-            TextField("输入消息", text: $prompt, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1...5)
-                .focused(isInputFocused)
-
-            Button {
-                if isRunning {
-                    task?.cancel()
-                    removeTask()
-                } else {
-                    isInputFocused.wrappedValue = false
-                    task = Task {
-                        await sendButtonAction()
-                        removeTask()
+            HStack(spacing: 12) {
+                if let mediaButtonAction {
+                    Button(action: mediaButtonAction) {
+                        Image(systemName: "photo.badge.plus")
+                            .font(.title3)
+                            .foregroundStyle(.tint)
                     }
+                    .buttonStyle(.plain)
                 }
-            } label: {
-                // iMessage-style send button: raised arrow while composing,
-                // stop sign while a reply is streaming.
-                Image(
-                    systemName: isRunning
-                        ? "stop.circle.fill" : "arrow.up.circle.fill"
-                )
-                .font(.title2)
-                .foregroundStyle(
-                    isRunning || canSend
-                        ? Color.accentColor : Color.secondary.opacity(0.4))
+
+                TextField("输入消息", text: $prompt, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...5)
+                    .focused(isInputFocused)
+
+                Button {
+                    if isRunning {
+                        task?.cancel()
+                        removeTask()
+                    } else {
+                        isInputFocused.wrappedValue = false
+                        task = Task {
+                            await sendButtonAction()
+                            removeTask()
+                        }
+                    }
+                } label: {
+                    // iMessage-style send button: raised arrow while composing,
+                    // stop sign while a reply is streaming. No glass here —
+                    // the tinted glyph is the whole control.
+                    Image(
+                        systemName: isRunning
+                            ? "stop.circle.fill" : "arrow.up.circle.fill"
+                    )
+                    .font(.title2)
+                    .foregroundStyle(
+                        isRunning || canSend
+                            ? Color.accentColor : Color.secondary.opacity(0.4))
+                }
+                .buttonStyle(.plain)
+                .disabled(!isRunning && !canSend)
+                .keyboardShortcut(isRunning ? .cancelAction : .defaultAction)
             }
-            .buttonStyle(.glass)
-            .disabled(!isRunning && !canSend)
-            .keyboardShortcut(isRunning ? .cancelAction : .defaultAction)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            // Capsule silhouette: both ends fully semicircular, exactly as the
+            // bar looked before the concentric-rounded-rectangle experiment.
+            .interactiveCapsuleGlassBackground()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .concentricInteractiveGlassBackground()
     }
 
     /// Whether the prompt has content worth sending (enables the send button).
