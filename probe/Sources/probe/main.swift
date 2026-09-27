@@ -5,6 +5,9 @@
 import Foundation
 import HuggingFace
 
+// Unbuffered stdout so timeline lines reach the log as they happen.
+setvbuf(stdout, nil, _IONBF, 0)
+
 final class SampleState: @unchecked Sendable {
     let lock = NSLock()
     var lastBytes: Int64 = 0
@@ -21,12 +24,12 @@ let state = SampleState()
 
 func forensicDump(reason: String) {
     let fm = FileManager.default
-    print("", flush: true)
-    print("=== FORENSIC DUMP (\(reason)) ===", flush: true)
+    print("")
+    print("=== FORENSIC DUMP (\(reason)) ===")
     for sub in ["blobs", "snapshots"] {
         let dir = repoDir.appending(path: sub)
         guard let entries = try? fm.contentsOfDirectory(atPath: dir.path) else {
-            print("\(sub)/: <missing>", flush: true)
+            print("\(sub)/: <missing>")
             continue
         }
         for entry in entries {
@@ -39,17 +42,17 @@ func forensicDump(reason: String) {
                     let attrs = try? fm.attributesOfItem(atPath: fp.path)
                     return (attrs?[.size] as? NSNumber)?.int64Value
                 }.reduce(0, +)
-                print("\(sub)/\(entry)/ -> \(files.count) files, \(total) bytes", flush: true)
+                print("\(sub)/\(entry)/ -> \(files.count) files, \(total) bytes")
                 for f in files {
                     let fp = path.appending(path: f)
                     let attrs = try? fm.attributesOfItem(atPath: fp.path)
                     let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
-                    print("    \(f)  \(size) bytes", flush: true)
+                    print("    \(f)  \(size) bytes")
                 }
             } else {
                 let attrs = try? fm.attributesOfItem(atPath: path.path)
                 let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
-                print("\(sub)/\(entry)  \(size) bytes", flush: true)
+                print("\(sub)/\(entry)  \(size) bytes")
             }
         }
     }
@@ -61,14 +64,14 @@ func forensicDump(reason: String) {
         for t in tmps where t.hasPrefix("hf-download-") {
             let attrs = try? fm.attributesOfItem(atPath: tmpDir.appending(path: t).path)
             let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
-            print("TMP  \(t)  \(size) bytes", flush: true)
+            print("TMP  \(t)  \(size) bytes")
         }
     }
 }
 
 func run() async {
     let client = HubClient(cache: HubCache(cacheDirectory: cacheDir))
-    print("probe start \(repoName), cache \(cacheDir.path)", flush: true)
+    print("probe start \(repoName), cache \(cacheDir.path)")
 
     do {
         let url = try await client.downloadSnapshot(
@@ -90,17 +93,16 @@ func run() async {
                 print(
                     String(
                         format: "[%7.2fs] %12d / %12d  (%5.2f%%)  %7.2f MB/s", dt, bytes, total,
-                        progress.fractionCompleted * 100, inst),
-                    flush: true)
+                        progress.fractionCompleted * 100, inst))
             }
         }
         let dt = Date().timeIntervalSince(start)
-        print(String(format: "DONE in %.1fs -> %@", dt, url.path), flush: true)
+        print(String(format: "DONE in %.1fs -> %@", dt, url.path))
         forensicDump(reason: "success")
         exit(0)
     } catch {
         let dt = Date().timeIntervalSince(start)
-        print("ERROR after \(dt)s: \(error)", flush: true)
+        print("ERROR after \(dt)s: \(error)")
         forensicDump(reason: "error")
         exit(1)
     }
@@ -112,7 +114,7 @@ let mainTask = Task { await run() }
 Task {
     try? await Task.sleep(nanoseconds: 8 * 60 * 1_000_000_000)
     let dt = Date().timeIntervalSince(start)
-    print("WATCHDOG: no completion after \(dt)s — treating as stall.", flush: true)
+    print("WATCHDOG: no completion after \(dt)s — treating as stall.")
     forensicDump(reason: "watchdog")
     exit(2)
 }
