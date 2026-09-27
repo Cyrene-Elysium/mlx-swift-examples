@@ -21,28 +21,8 @@ struct PromptField: View {
     let sendButtonAction: () async -> Void
     let mediaButtonAction: (() -> Void)?
 
-    /// When non-nil, a thinking-mode toggle is shown on the left of the bar.
-    /// Passed only for models that support the /think soft switch.
-    var thinkingEnabled: Binding<Bool>? = nil
-
     var body: some View {
         HStack(spacing: 12) {
-            if let thinkingEnabled {
-                Button {
-                    thinkingEnabled.wrappedValue.toggle()
-                } label: {
-                    Image(
-                        systemName: thinkingEnabled.wrappedValue
-                            ? "lightbulb.fill" : "lightbulb"
-                    )
-                    .font(.title3)
-                    .foregroundStyle(
-                        thinkingEnabled.wrappedValue
-                            ? Color.accentColor : Color.secondary)
-                }
-                .buttonStyle(.plain)
-            }
-
             if let mediaButtonAction {
                 Button(action: mediaButtonAction) {
                     Image(systemName: "photo.badge.plus")

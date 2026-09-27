@@ -69,6 +69,22 @@ class ChatViewModel {
         return max(selectedModel.contextLength - used, 0)
     }
 
+    /// 是否接近上下文上限（剩余 < 20%），用于触发总结提示。
+    var isContextNearLimit: Bool {
+        remainingTokens < selectedModel.contextLength / 5
+    }
+
+    /// 总结用的模型（可在设置页切换，默认 qwen3:4b）。
+    var summaryModel: LMModel {
+        let name =
+            UserDefaults.standard.string(forKey: "summaryModelName") ?? "qwen3:4b"
+        return MLXService.availableModels.first { $0.name == name }
+            ?? MLXService.availableModels.first!
+    }
+
+    /// 总结是否进行中（用于展示等待动画）。
+    var isSummarizing = false
+
     /// Indicates if text generation is in progress
     var isGenerating = false
 
@@ -236,6 +252,84 @@ class ChatViewModel {
     func deleteMessage(_ message: Message) {
         session.messages.removeAll { $0.id == message.id }
         store.save(session)
+    }
+
+    /// 将历史对话浓缩为摘要，替换为「人设 + 摘要 + 最近 2 条」，
+    /// 最大限度保留记忆的同时压缩上下文占用。
+    func summarizeConversation() async {
+        isSummarizing = true
+        defer { isSummarizing = false }
+
+        let nonSystem = session.messages.filter { $0.role != .system }
+        guard !nonSystem.isEmpty else { return }
+
+        do {
+            let summary = try await generateSummary(history: nonSystem)
+
+            let systemMessages = session.messages.filter { $0.role == .system }
+            let recent = Array(nonSystem.suffix(2))
+            session.messages =
+                systemMessages + [.system("对话摘要：\(summary)")] + recent
+            store.save(session)
+        } catch {
+            errorMessage = "总结失败：\(error.localizedDescription)"
+        }
+    }
+
+    /// 从最旧的非 system 消息开始丢弃，直到回到 80% 以内。
+    /// 千束人设等 system 消息始终保留。
+    func truncateHistory() {
+        let systemMessages = session.messages.filter { $0.role == .system }
+        var nonSystem = session.messages.filter { $0.role != .system }
+
+        let systemChars = systemMessages.reduce(0) { $0 + $1.content.count }
+        // 80% 上限对应的字符数（token ≈ 字符 / 2）
+        let targetChars = selectedModel.contextLength * 8 / 5
+
+        while !nonSystem.isEmpty {
+            let total =
+                systemChars + nonSystem.reduce(0) { $0 + $1.content.count }
+            if total <= targetChars { break }
+            nonSystem.removeFirst()
+        }
+
+        session.messages = systemMessages + nonSystem
+        store.save(session)
+    }
+
+    /// 用总结模型把历史对话压缩成一段摘要。
+    private func generateSummary(history: [Message]) async throws -> String {
+        let historyText = history.map { message in
+            let speaker = message.role == .user ? "用户" : "千束"
+            return "\(speaker)：\(message.content)"
+        }.joined(separator: "\n")
+
+        let prompt = """
+        请把以下对话历史总结成一段简洁的摘要，用于后续对话延续上下文。
+        要求：
+        1. 保留：人物关系、重要约定、未完成的事项、用户明确表达过的偏好；
+        2. 省略：寒暄、客套、已经解决且不再相关的内容；
+        3. 控制在 150 字以内；
+        4. 只输出摘要正文，不要任何前缀或解释。
+
+        对话历史：
+        \(historyText)
+        """
+
+        let model = summaryModel
+        var result = ""
+        let stream = try await mlxService.generate(
+            messages: [.user(prompt)], model: model,
+            thinkingEnabled: nil,
+            kvBits: (UserDefaults.standard.object(forKey: "kvCacheQuantized") as? Bool
+                ?? true) ? 8 : nil
+        )
+        for await generation in stream {
+            if case .chunk(let chunk) = generation {
+                result += chunk
+            }
+        }
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

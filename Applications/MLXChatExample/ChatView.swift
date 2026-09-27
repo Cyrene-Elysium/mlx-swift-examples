@@ -51,6 +51,9 @@ struct ChatView: View {
     /// Focus state for the input field, used to dismiss the keyboard.
     @FocusState private var isInputFocused: Bool
 
+    /// Whether to show the summary-or-truncate prompt before sending.
+    @State private var showsSummaryPrompt = false
+
     #if os(iOS)
         /// Selected items from PhotosPicker
         @State private var photosPickerItems: [PhotosPickerItem] = []
@@ -60,6 +63,16 @@ struct ChatView: View {
     /// - Parameter viewModel: The view model to manage chat state
     init(viewModel: ChatViewModel) {
         self.vm = viewModel
+    }
+
+    /// Sends the prompt, or first asks whether to summarize when the context
+    /// is nearing its limit.
+    private func sendOrPrompt() async {
+        if vm.isContextNearLimit {
+            showsSummaryPrompt = true
+        } else {
+            await vm.generate()
+        }
     }
 
     var body: some View {
@@ -81,24 +94,50 @@ struct ChatView: View {
                         MediaPreviewsView(mediaSelection: vm.mediaSelection)
                     }
 
-                    // Remaining context hint
-                    Text("剩余上下文 · 约 \(vm.remainingTokens) token")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    // Thinking toggle + remaining context + summarize, above the input bar
+                    HStack(spacing: 14) {
+                        if vm.selectedModel.supportsThinking {
+                            Button {
+                                vm.thinkingEnabled.toggle()
+                            } label: {
+                                Image(systemName: "sparkles")
+                                    .font(.subheadline)
+                                    .foregroundStyle(
+                                        vm.thinkingEnabled
+                                            ? Color.accentColor : Color.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Spacer()
+
+                        Text("剩余上下文 · 约 \(vm.remainingTokens) token")
+                            .font(.caption2)
+                            .foregroundStyle(
+                                vm.isContextNearLimit ? Color.red : Color.secondary)
+
+                        Button {
+                            Task { await vm.summarizeConversation() }
+                        } label: {
+                            Image(systemName: "rectangle.compress.vertical")
+                                .font(.subheadline)
+                                .foregroundStyle(.tint)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(vm.isSummarizing)
+                    }
+                    .padding(.horizontal, 16)
 
                     // Input field with send and media attachment buttons
                     PromptField(
                         prompt: $vm.prompt,
                         isInputFocused: $isInputFocused,
-                        sendButtonAction: vm.generate,
+                        sendButtonAction: sendOrPrompt,
                         // Only show media button for vision-capable models
                         mediaButtonAction: vm.selectedModel.isVisionModel
                             ? {
                                 vm.mediaSelection.isShowing = true
-                            } : nil,
-                        // Thinking toggle only for /think-capable models
-                        thinkingEnabled: vm.selectedModel.supportsThinking
-                            ? $vm.thinkingEnabled : nil
+                            } : nil
                     )
                     .padding(.horizontal, 12)
                     .padding(.bottom, 6)
@@ -106,6 +145,34 @@ struct ChatView: View {
             }
             .navigationTitle(vm.session.title)
             .navigationBarTitleDisplayMode(.inline)
+            .confirmationDialog(
+                "上下文即将用尽，是否将历史对话压缩为摘要？",
+                isPresented: $showsSummaryPrompt,
+                titleVisibility: .visible
+            ) {
+                Button("压缩摘要") {
+                    Task { await vm.summarizeConversation() }
+                }
+                Button("自动截断") {
+                    vm.truncateHistory()
+                }
+                Button("取消", role: .cancel) {}
+            }
+            .overlay {
+                if vm.isSummarizing {
+                    ZStack {
+                        Color.black.opacity(0.15)
+                        VStack(spacing: 14) {
+                            ProgressView()
+                            Text("正在浓缩记忆…")
+                                .font(.subheadline)
+                        }
+                        .padding(24)
+                        .background(.regularMaterial, in: .rect(cornerRadius: 16))
+                    }
+                    .ignoresSafeArea()
+                }
+            }
             .toolbar {
                 ChatToolbarView(vm: vm)
             }

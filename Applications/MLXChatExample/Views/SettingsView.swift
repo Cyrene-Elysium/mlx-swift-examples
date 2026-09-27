@@ -15,6 +15,10 @@ struct SettingsView: View {
     @State private var kvCacheQuantized =
         UserDefaults.standard.object(forKey: "kvCacheQuantized") as? Bool ?? true
 
+    /// Model used to summarize conversations (default qwen3:4b).
+    @State private var summaryModelName =
+        UserDefaults.standard.string(forKey: "summaryModelName") ?? "qwen3:4b"
+
     /// Persona draft being edited.
     @State private var personaDraft = ""
 
@@ -31,6 +35,15 @@ struct SettingsView: View {
                 }
                 .onChange(of: kvCacheQuantized) { _, newValue in
                     UserDefaults.standard.set(newValue, forKey: "kvCacheQuantized")
+                }
+
+                Picker("总结模型", selection: $summaryModelName) {
+                    ForEach(MLXService.availableModels) { model in
+                        Text(model.displayName).tag(model.name)
+                    }
+                }
+                .onChange(of: summaryModelName) { _, newValue in
+                    UserDefaults.standard.set(newValue, forKey: "summaryModelName")
                 }
             }
 
