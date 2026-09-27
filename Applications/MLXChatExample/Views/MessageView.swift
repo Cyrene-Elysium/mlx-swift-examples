@@ -111,7 +111,7 @@ struct MessageView: View {
 
                 // Per-reply generation speed.
                 if let speed = message.tokensPerSecond {
-                    Text(String(format: "%.1f tok/s", speed))
+                    Text(String(format: "%.1f tokens/s", speed))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

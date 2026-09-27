@@ -20,13 +20,9 @@ struct ModelIcon: View {
                 .frame(width: 28)
         } else {
             Text("文")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.tint)
-                .frame(width: 28, height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(.tint.opacity(0.14))
-                )
+                .frame(width: 28)
         }
     }
 }
@@ -49,28 +45,21 @@ struct ModelManagerView: View {
     /// Error message shown when deletion fails.
     @State private var errorMessage: String?
 
-    /// Download progress fraction for the in-flight download, sampled from the
-    /// on-disk byte count (more reliable than the hub's Progress object).
-    @State private var downloadFraction: Double = 0
-
-    /// Transfer speed of the in-flight download, in bytes per second.
-    @State private var downloadSpeed: Double = 0
-
-    /// Whether to show the download-failure alert.
-    @State private var showsDownloadError = false
+    /// Error message from a failed model download, presented as an alert.
+    @State private var downloadErrorMessage: String?
 
     /// Models that have already been downloaded to this device, sorted by name.
     private var downloadedModels: [LMModel] {
         MLXService.availableModels
             .filter { downloadedSizes[$0.name] != nil }
-            .sorted { Self.modelSort($0, $1) }
+            .sorted { LMModel.listSort($0, $1) }
     }
 
     /// Models that are available to download but not yet on this device, sorted by name.
     private var notDownloadedModels: [LMModel] {
         MLXService.availableModels
             .filter { downloadedSizes[$0.name] == nil }
-            .sorted { Self.modelSort($0, $1) }
+            .sorted { LMModel.listSort($0, $1) }
     }
 
     var body: some View {
@@ -107,48 +96,21 @@ struct ModelManagerView: View {
         .navigationTitle("模型")
         .task {
             await refreshDownloadedSizes()
-            // Continuously sample download progress from on-disk bytes.
-            // 1s interval keeps directory enumeration from competing with the
-            // download for CPU/IO; speed comes from the byte delta between samples.
-            var lastBytes: Int64 = 0
-            var lastDate = Date()
-            while !Task.isCancelled {
-                if let name = MLXService.shared.downloadingModelName,
-                    let model = MLXService.availableModels.first(where: {
-                        $0.name == name
-                    }),
-                    let total = model.estimatedSizeBytes
-                {
-                    let dir = MLXService.downloadDirectory(for: model)
-                    let bytes = await MLXService.directorySize(at: dir)
-                    let now = Date()
-                    let elapsed = now.timeIntervalSince(lastDate)
-                    if elapsed > 0.5 {
-                        downloadSpeed = Double(bytes - lastBytes) / elapsed
-                        lastBytes = bytes
-                        lastDate = now
-                    }
-                    downloadFraction = min(Double(bytes) / Double(total), 1.0)
-                } else {
-                    downloadFraction = 0
-                    downloadSpeed = 0
-                    lastBytes = 0
-                    lastDate = Date()
-                }
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-            }
         }
         .refreshable {
             await refreshDownloadedSizes()
         }
-        .onChange(of: MLXService.shared.downloadingModelName) { _, newValue in
-            // Refresh the downloaded list once a download finishes or is cancelled.
-            if newValue == nil {
+        .onChange(of: MLXService.shared.activeDownloads) { old, new in
+            // A download finished (or was cancelled) when an entry disappears:
+            // re-scan which models are now on disk.
+            if old.count > new.count {
                 Task { await refreshDownloadedSizes() }
             }
         }
-        .onChange(of: MLXService.shared.downloadError) { _, newValue in
-            showsDownloadError = newValue != nil
+        .onChange(of: MLXService.shared.downloadErrors) { old, new in
+            for (name, message) in new where old[name] == nil {
+                downloadErrorMessage = "\(name)：\(message)"
+            }
         }
         .confirmationDialog(
             "删除已下载的模型？",
@@ -170,11 +132,14 @@ struct ModelManagerView: View {
         }
         .alert(
             "下载失败",
-            isPresented: $showsDownloadError
+            isPresented: Binding(
+                get: { downloadErrorMessage != nil },
+                set: { if !$0 { downloadErrorMessage = nil } }
+            )
         ) {
             Button("好", role: .cancel) {}
         } message: {
-            Text(MLXService.shared.downloadError ?? "")
+            Text(downloadErrorMessage ?? "")
         }
         .alert(
             "删除失败",
@@ -221,31 +186,19 @@ struct ModelManagerView: View {
 
             Spacer()
 
-            // Download control (App Store style), right-aligned near the edge
-            if isDownloading(model) {
-                HStack(spacing: 8) {
-                    ZStack {
-                        Circle()
-                            .stroke(.quaternary, lineWidth: 2)
-                        Circle()
-                            .trim(from: 0, to: max(downloadFraction, 0.03))
-                            .stroke(
-                                Color.accentColor,
-                                style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                            .rotationEffect(.degrees(-90))
-                            .animation(.linear(duration: 0.3), value: downloadFraction)
-                    }
-                    .frame(width: 24, height: 24)
-
+            // Download control (App Store style): the ring stays pinned where
+            // the download button was; the cancel button pops out to its left.
+            if let dl = MLXService.shared.activeDownloads[model.name] {
+                HStack(spacing: 10) {
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(Int(downloadFraction * 100))%")
+                        Text("\(Int(dl.fraction * 100))%")
                             .font(.caption.weight(.medium))
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
-                        if downloadSpeed > 1_024 {
+                        if dl.speed > 1_024 {
                             Text(
                                 ByteCountFormatter.string(
-                                    fromByteCount: Int64(downloadSpeed),
+                                    fromByteCount: Int64(dl.speed),
                                     countStyle: .file) + "/s"
                             )
                             .font(.caption2)
@@ -253,22 +206,32 @@ struct ModelManagerView: View {
                             .foregroundStyle(.secondary)
                         }
                     }
+                    .frame(minWidth: 64, alignment: .trailing)
 
                     Button {
-                        MLXService.shared.cancelDownload()
+                        MLXService.shared.cancelDownload(of: model)
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title3)
                             .foregroundStyle(.red)
                     }
                     .buttonStyle(.plain)
+                    .transition(.scale.combined(with: .opacity))
+
+                    ZStack {
+                        Circle()
+                            .stroke(.quaternary, lineWidth: 2)
+                        Circle()
+                            .trim(from: 0, to: max(dl.fraction, 0.03))
+                            .stroke(
+                                Color.accentColor,
+                                style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                            .animation(.linear(duration: 0.2), value: dl.fraction)
+                    }
+                    .frame(width: 24, height: 24)
                 }
-                .transition(
-                    .asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .opacity
-                    )
-                )
+                .transition(.opacity)
             } else if downloadedSizes[model.name] == nil {
                 Button {
                     MLXService.shared.downloadModel(model)
@@ -282,27 +245,21 @@ struct ModelManagerView: View {
             }
         }
         .animation(
-            .spring(response: 0.3, dampingFraction: 0.8),
-            value: isDownloading(model)
+            .spring(response: 0.35, dampingFraction: 0.75),
+            value: MLXService.shared.activeDownloads[model.name] != nil
         )
         .padding(.vertical, 2)
     }
 
-    private func isDownloading(_ model: LMModel) -> Bool {
-        MLXService.shared.downloadingModelName == model.name
-    }
-
     // MARK: - Helpers
 
-    /// 模型排序：先按名称升序，名称相同再按体积从小到大。
-    private static func modelSort(_ a: LMModel, _ b: LMModel) -> Bool {
-        if a.name != b.name { return a.name < b.name }
-        return (a.estimatedSizeBytes ?? 0) < (b.estimatedSizeBytes ?? 0)
-    }
-
     private func statusLine(for model: LMModel) -> String {
-        if isDownloading(model) {
-            return "下载中…"
+        if let dl = MLXService.shared.activeDownloads[model.name] {
+            let done = ByteCountFormatter.string(
+                fromByteCount: dl.completedBytes, countStyle: .file)
+            let total = ByteCountFormatter.string(
+                fromByteCount: dl.totalBytes, countStyle: .file)
+            return dl.totalBytes > 0 ? "下载中 · \(done) / \(total)" : "下载中…"
         }
         if let size = downloadedSizes[model.name] {
             return "已下载 · "

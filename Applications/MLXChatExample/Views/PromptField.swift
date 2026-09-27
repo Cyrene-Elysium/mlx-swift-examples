@@ -27,8 +27,9 @@ struct PromptField: View {
                 Button(action: mediaButtonAction) {
                     Image(systemName: "photo.badge.plus")
                         .font(.title3)
+                        .foregroundStyle(.tint)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.glass)
             }
 
             TextField("输入消息", text: $prompt, axis: .vertical)
@@ -48,16 +49,29 @@ struct PromptField: View {
                     }
                 }
             } label: {
-                Image(systemName: isRunning ? "stop.circle.fill" : "paperplane.fill")
-                    .font(.title3)
-                    .foregroundStyle(.tint)
+                // iMessage-style send button: raised arrow while composing,
+                // stop sign while a reply is streaming.
+                Image(
+                    systemName: isRunning
+                        ? "stop.circle.fill" : "arrow.up.circle.fill"
+                )
+                .font(.title2)
+                .foregroundStyle(
+                    isRunning || canSend
+                        ? Color.accentColor : Color.secondary.opacity(0.4))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.glass)
+            .disabled(!isRunning && !canSend)
             .keyboardShortcut(isRunning ? .cancelAction : .defaultAction)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .liquidGlassBackground(in: .rect(cornerRadius: 24))
+    }
+
+    /// Whether the prompt has content worth sending (enables the send button).
+    private var canSend: Bool {
+        !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var isRunning: Bool {

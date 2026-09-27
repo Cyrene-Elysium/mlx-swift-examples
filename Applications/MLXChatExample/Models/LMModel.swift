@@ -31,6 +31,13 @@ struct LMModel {
 // MARK: - Helpers
 
 extension LMModel {
+    /// 组内统一排序：名称升序，名称相同再按体积从小到大。
+    /// 「已下载 → 未下载」的分组优先级由各调用方处理。
+    static func listSort(_ a: LMModel, _ b: LMModel) -> Bool {
+        if a.name != b.name { return a.name < b.name }
+        return (a.estimatedSizeBytes ?? 0) < (b.estimatedSizeBytes ?? 0)
+    }
+
     /// Display name shown in the picker and model list, title-cased.
     var displayName: String {
         name.prefix(1).uppercased() + name.dropFirst()

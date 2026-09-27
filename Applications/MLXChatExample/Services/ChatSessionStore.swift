@@ -23,6 +23,13 @@ final class ChatSessionStore {
     /// All known sessions, most recently updated first.
     private(set) var sessions: [ChatSession]
 
+    /// Sessions whose conversation is currently being summarized (compressed).
+    /// Tracked here — not in a per-view view model — so the indicator survives
+    /// navigating back to the session list and re-entering the conversation:
+    /// each entry into a chat builds a fresh `ChatViewModel`, which would
+    /// otherwise lose the in-flight state.
+    var summarizingSessionIDs: Set<UUID> = []
+
     /// Name of the model selected for new sessions and model management.
     var defaultModelName: String {
         didSet {

@@ -7,36 +7,65 @@
 
 import SwiftUI
 
-/// Toolbar view for the chat interface that displays error messages, download progress,
-/// generation statistics, and model selection controls. Generation-related toggles
-/// (thinking mode, KV-cache quantization) live in Settings to keep this bar uncluttered.
-struct ChatToolbarView: View {
-    /// View model containing the chat state and controls
+/// Toolbar content for the chat interface: error indicator, download
+/// progress for the selected model, clear-conversation, and model selection —
+/// each as its own item so they sit as separate buttons. Generation-related
+/// toggles (thinking mode, KV-cache quantization) live in Settings to keep
+/// this bar uncluttered.
+///
+/// `ToolbarContent` bodies are not main-actor isolated, so every conditional
+/// lives inside a small subview (whose `body` is).
+struct ChatToolbarView: ToolbarContent {
     @Bindable var vm: ChatViewModel
 
-    /// Confirm dialog for clearing the conversation.
-    @State private var showsClearConfirmation = false
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            ChatToolbarErrorItem(vm: vm)
+        }
 
-    /// Names of models already downloaded, used to mark them in the picker.
-    @State private var downloadedNames: Set<String> = []
+        ToolbarItem(placement: .primaryAction) {
+            ChatToolbarDownloadItem(vm: vm)
+        }
+
+        ToolbarItem(placement: .primaryAction) {
+            ChatToolbarClearButton(vm: vm)
+        }
+
+        ToolbarItem(placement: .primaryAction) {
+            ChatToolbarModelPicker(vm: vm)
+        }
+    }
+}
+
+/// Error indicator for the current conversation, shown when present.
+private struct ChatToolbarErrorItem: View {
+    let vm: ChatViewModel
 
     var body: some View {
-        // Display error message if present
         if let errorMessage = vm.errorMessage {
             ErrorView(errorMessage: errorMessage)
         }
+    }
+}
 
-        // Show download progress for model loading
-        if let progress = vm.modelDownloadProgress, !progress.isFinished,
-            let name = MLXService.shared.downloadingModelName,
-            let model = MLXService.availableModels.first(where: { $0.name == name })
-        {
-            DownloadProgressView(
-                directory: MLXService.downloadDirectory(for: model),
-                totalBytes: model.estimatedSizeBytes ?? progress.totalUnitCount)
+/// Download progress for the selected model, shown while it is downloading.
+private struct ChatToolbarDownloadItem: View {
+    let vm: ChatViewModel
+
+    var body: some View {
+        if MLXService.shared.activeDownloads[vm.selectedModel.name] != nil {
+            DownloadProgressView(modelName: vm.selectedModel.name)
         }
+    }
+}
 
-        // Clear chat history (explicit, with confirmation)
+/// Clear chat history (explicit, with confirmation), as its own toolbar item.
+private struct ChatToolbarClearButton: View {
+    @Bindable var vm: ChatViewModel
+
+    @State private var showsClearConfirmation = false
+
+    var body: some View {
         Button {
             showsClearConfirmation = true
         } label: {
@@ -53,10 +82,20 @@ struct ChatToolbarView: View {
             }
             Button("取消", role: .cancel) {}
         }
+    }
+}
 
-        // Model selection picker
+/// Model selection picker: downloaded models first (marked with ✓), then the
+/// rest, each group sorted by name then size.
+private struct ChatToolbarModelPicker: View {
+    @Bindable var vm: ChatViewModel
+
+    /// Names of models already downloaded, used to mark them in the picker.
+    @State private var downloadedNames: Set<String> = []
+
+    var body: some View {
         Picker("模型", selection: $vm.selectedModel) {
-            ForEach(MLXService.availableModels) { model in
+            ForEach(sortedModels) { model in
                 Text(pickerLabel(for: model))
                     .tag(model)
             }
@@ -64,11 +103,22 @@ struct ChatToolbarView: View {
         .task {
             await refreshDownloadedNames()
         }
-        .onChange(of: MLXService.shared.downloadingModelName) { _, newValue in
-            if newValue == nil {
+        .onChange(of: MLXService.shared.activeDownloads) { old, new in
+            if old.count > new.count {
                 Task { await refreshDownloadedNames() }
             }
         }
+    }
+
+    /// 已下载在前（组内 名称 → 体积），未下载在后（同序）。
+    private var sortedModels: [LMModel] {
+        let downloaded = MLXService.availableModels
+            .filter { downloadedNames.contains($0.name) }
+            .sorted { LMModel.listSort($0, $1) }
+        let rest = MLXService.availableModels
+            .filter { !downloadedNames.contains($0.name) }
+            .sorted { LMModel.listSort($0, $1) }
+        return downloaded + rest
     }
 
     /// 模型选择器的显示文字：类型标注 + 已下载打勾。

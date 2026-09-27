@@ -108,7 +108,7 @@ struct ChatView: View {
                                     .frame(width: 44, height: 44)
                                     .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.glass)
                         }
 
                         Spacer()
@@ -127,7 +127,7 @@ struct ChatView: View {
                                 .frame(width: 44, height: 44)
                                 .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.glass)
                         .disabled(vm.isSummarizing)
                     }
                     .padding(.horizontal, 16)
@@ -165,14 +165,19 @@ struct ChatView: View {
             .overlay {
                 if vm.isSummarizing {
                     ZStack {
-                        Color.black.opacity(0.15)
+                        // Full-screen light gaussian blur over the conversation.
+                        Rectangle()
+                            .fill(.ultraThinMaterial)
+                            .ignoresSafeArea()
                         VStack(spacing: 14) {
                             ProgressView()
-                            Text("正在浓缩记忆…")
-                                .font(.subheadline)
+                            Text(
+                                vm.session.isChisato
+                                    ? "正在浓缩记忆，主人请等一下啦"
+                                    : "正在压缩上下文"
+                            )
+                            .font(.subheadline)
                         }
-                        .padding(24)
-                        .background(.regularMaterial, in: .rect(cornerRadius: 16))
                     }
                     .ignoresSafeArea()
                 }

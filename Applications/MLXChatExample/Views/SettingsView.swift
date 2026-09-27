@@ -22,6 +22,9 @@ struct SettingsView: View {
     /// Persona draft being edited.
     @State private var personaDraft = ""
 
+    /// Names of models already downloaded, used to mark them in the picker.
+    @State private var downloadedNames: Set<String> = []
+
     var body: some View {
         Form {
             Section("生成选项") {
@@ -38,7 +41,7 @@ struct SettingsView: View {
                 }
 
                 Picker("总结模型", selection: $summaryModelName) {
-                    ForEach(MLXService.availableModels) { model in
+                    ForEach(sortedModels) { model in
                         Text(summaryLabel(for: model)).tag(model.name)
                     }
                 }
@@ -71,13 +74,42 @@ struct SettingsView: View {
         .onAppear {
             personaDraft = ChisatoProfile.shared.persona
         }
+        .task {
+            await refreshDownloadedNames()
+        }
+        .onChange(of: MLXService.shared.activeDownloads) { old, new in
+            if old.count > new.count {
+                Task { await refreshDownloadedNames() }
+            }
+        }
     }
 
-    /// 总结模型选择器的显示文字：类型标注 + 默认标识。
+    /// 已下载在前（组内 名称 → 体积），未下载在后（同序）。
+    private var sortedModels: [LMModel] {
+        let downloaded = MLXService.availableModels
+            .filter { downloadedNames.contains($0.name) }
+            .sorted { LMModel.listSort($0, $1) }
+        let rest = MLXService.availableModels
+            .filter { !downloadedNames.contains($0.name) }
+            .sorted { LMModel.listSort($0, $1) }
+        return downloaded + rest
+    }
+
+    /// 查询已下载的模型名集合。
+    private func refreshDownloadedNames() async {
+        var names = Set<String>()
+        for model in MLXService.availableModels where MLXService.shared.isDownloaded(model) {
+            names.insert(model.name)
+        }
+        downloadedNames = names
+    }
+
+    /// 总结模型选择器的显示文字：类型标注 + 已下载打勾 + 默认标识。
     private func summaryLabel(for model: LMModel) -> String {
         let kind = model.isVisionModel ? "视觉" : "文本"
+        let check = downloadedNames.contains(model.name) ? " ✓" : ""
         let isDefault = model.name == "qwen3:4b"
-        return "\(model.displayName)（\(kind)）" + (isDefault ? "（默认）" : "")
+        return "\(model.displayName)（\(kind)）\(check)" + (isDefault ? "（默认）" : "")
     }
 
     /// Propagate persona changes to the dedicated Chisato conversation's

@@ -14,6 +14,7 @@ import MLXLLM
 import MLXLMCommon
 import MLXVLM
 import Tokenizers
+import UIKit
 
 /// A service class that manages machine learning models for text and vision-language tasks.
 /// This class handles model loading, caching, and text generation using various LLM and VLM models.
@@ -38,35 +39,67 @@ class MLXService {
             name: "gemma4:E2B", configuration: VLMRegistry.gemma4_E2B_it_4bit, type: .vlm),
     ]
 
+    /// Live state of a single model download, fed from the hub library's
+    /// byte-accurate `Progress` object (sampled every 100ms).
+    @MainActor
+    struct DownloadState: Equatable {
+        /// Fraction completed, 0...1.
+        var fraction: Double = 0
+        /// Bytes downloaded so far (across all files of the snapshot).
+        var completedBytes: Int64 = 0
+        /// Total bytes expected (sum of matched file sizes).
+        var totalBytes: Int64 = 0
+        /// Smoothed transfer speed in bytes/second.
+        var speed: Double = 0
+    }
+
+    /// All in-flight downloads keyed by model name. Multiple models can
+    /// download concurrently; each row in the model manager reads its own entry.
+    @MainActor
+    private(set) var activeDownloads: [String: DownloadState] = [:]
+
+    /// Error message from the most recent failed download attempt, per model.
+    @MainActor
+    private(set) var downloadErrors: [String: String] = [:]
+
+    /// In-flight download tasks keyed by model name, kept so the model
+    /// manager can cancel them individually.
+    @MainActor
+    private var downloadTasks: [String: Task<Void, Never>] = [:]
+
+    /// Background task identifiers backing each download, granting ~30s of
+    /// continued execution after the app moves to the background.
+    @MainActor
+    private var backgroundTaskIDs: [String: UIBackgroundTaskIdentifier] = [:]
+
+    /// Speed differentiation samples per model (last completed bytes + date).
+    @MainActor
+    private var speedSamples: [String: (completed: Int64, date: Date)] = [:]
+
+    /// Names of models currently resident in the in-memory cache. `NSCache`
+    /// cannot be enumerated, so this set is maintained alongside it — it is
+    /// what memory-pressure eviction operates on.
+    @MainActor
+    private var loadedModelNames: Set<String> = []
+
     /// Cache to store loaded model containers to avoid reloading.
     private let modelCache = NSCache<NSString, ModelContainer>()
 
-    /// Tracks the current model download progress.
-    /// Access this property to monitor model download status.
-    @MainActor
-    private(set) var modelDownloadProgress: Progress?
-
-    /// Name of the model currently downloading, if any.
-    @MainActor
-    private(set) var downloadingModelName: String?
-
-    /// Error from the most recent download attempt, if any.
-    @MainActor
-    private(set) var downloadError: String?
-
-    /// In-flight download task, kept so the model manager can cancel it.
-    @MainActor
-    private var downloadTask: Task<Void, Error>?
+    // MARK: - Loading
 
     /// Loads a model from the hub or retrieves it from cache.
-    /// - Parameter model: The model configuration to load
-    /// - Returns: A ModelContainer instance containing the loaded model
-    /// - Throws: Errors that might occur during model loading
+    ///
+    /// While loading (downloading), progress is routed into
+    /// ``activeDownloads`` so every UI surface shows live byte-accurate
+    /// progress. When this function is entered without an existing tracking
+    /// entry (the generate() path), it owns the entry's lifecycle; the
+    /// explicit download path (``downloadModel(_:)``) manages its own.
     private func load(model: LMModel) async throws -> ModelContainer {
         // Size the MLX cache from physical memory. The original 20 MB limit is
         // far too small and causes constant cache thrashing (activations / KV
         // cache paged in and out), which slows generation a lot. Use ~1/4 of
-        // RAM, clamped to a safe [512 MB, 4 GB] window.
+        // RAM, clamped to a safe [512 MB, 4 GB] window. (When backgrounded the
+        // scene-phase hook clamps this to 256 MB instead.)
         let physicalMemory = ProcessInfo.processInfo.physicalMemory
         let quarter = physicalMemory / 4
         let cacheLimit = min(
@@ -74,6 +107,38 @@ class MLXService {
             UInt64(4 * 1024 * 1024 * 1024))
         Memory.cacheLimit = Int(cacheLimit)
 
+        let ownsTracking = await MainActor.run {
+            let isNew = activeDownloads[model.name] == nil
+            if isNew {
+                activeDownloads[model.name] = DownloadState()
+                speedSamples[model.name] = nil
+            }
+            return isNew
+        }
+
+        do {
+            let container = try await loadTracked(model: model)
+            if ownsTracking {
+                await MainActor.run {
+                    activeDownloads[model.name] = nil
+                    speedSamples[model.name] = nil
+                }
+            }
+            return container
+        } catch {
+            if ownsTracking {
+                await MainActor.run {
+                    activeDownloads[model.name] = nil
+                    speedSamples[model.name] = nil
+                }
+            }
+            throw error
+        }
+    }
+
+    /// The actual hub fetch + load, with the library progress handler wired
+    /// into ``activeDownloads``.
+    private func loadTracked(model: LMModel) async throws -> ModelContainer {
         // Return cached model if available to avoid reloading
         if let container = modelCache.object(forKey: model.name as NSString) {
             return container
@@ -104,63 +169,142 @@ class MLXService {
                 configuration: model.configuration
             ) { progress in
                 Task { @MainActor in
-                    self.modelDownloadProgress = progress
+                    Self.updateDownloadState(for: model.name, progress: progress)
                 }
             }
 
             // Cache the loaded model for future use
             modelCache.setObject(container, forKey: model.name as NSString)
+            await MainActor.run {
+                loadedModelNames.insert(model.name)
+            }
 
             return container
         }
     }
 
-    /// Starts downloading (and pre-loading) a model, reporting progress via
-    /// `modelDownloadProgress`. Used by the model manager's download button.
+    /// Maps the hub library's byte-level `Progress` (delivered on the main
+    /// actor every 100ms) into the observable ``activeDownloads`` entry,
+    /// including a lightly smoothed transfer speed.
+    @MainActor
+    private static func updateDownloadState(for name: String, progress: Progress) {
+        guard var state = shared.activeDownloads[name] else { return }
+
+        let now = Date()
+        let completed = progress.completedUnitCount
+        if let last = shared.speedSamples[name] {
+            let dt = now.timeIntervalSince(last.date)
+            if dt > 0.05 {
+                let instantaneous = Double(completed - last.completed) / dt
+                state.speed =
+                    state.speed <= 0
+                    ? max(instantaneous, 0)
+                    : max(state.speed * 0.6 + instantaneous * 0.4, 0)
+            }
+        }
+        shared.speedSamples[name] = (completed, now)
+
+        state.completedBytes = completed
+        state.totalBytes = max(progress.totalUnitCount, 0)
+        state.fraction =
+            progress.totalUnitCount > 0
+            ? min(Double(completed) / Double(progress.totalUnitCount), 1.0)
+            : 0
+        shared.activeDownloads[name] = state
+    }
+
+    // MARK: - Download control
+
+    /// Starts downloading (and pre-loading) a model. Multiple models may
+    /// download concurrently; downloading a model that already has an
+    /// in-flight task is a no-op.
     @MainActor
     func downloadModel(_ model: LMModel) {
-        downloadTask?.cancel()
-        downloadingModelName = model.name
-        downloadError = nil
-        downloadTask = Task {
-            defer {
-                downloadingModelName = nil
-                downloadTask = nil
+        guard downloadTasks[model.name] == nil, activeDownloads[model.name] == nil else {
+            return
+        }
+        downloadErrors[model.name] = nil
+
+        let name = model.name
+        let bgID = UIApplication.shared.beginBackgroundTask(withName: "model-download-\(name)") {
+            // Expiration: hand the identifier back; the system decides what
+            // happens to the process from here.
+            Task { @MainActor in
+                MLXService.shared.endBackgroundTask(for: name)
             }
-            // swift-huggingface 的下载循环遇到网络错误会直接抛出、不自动重试，
-            // 网络一抖就会整体失败。这里做有限次重试（带退避）提升稳定性；
-            // 断点续传（Range）会让重试从已下载位置继续，不会从头下。
+        }
+        if bgID != .invalid {
+            backgroundTaskIDs[name] = bgID
+        }
+
+        activeDownloads[name] = DownloadState()
+        speedSamples[name] = nil
+
+        downloadTasks[name] = Task {
+            defer {
+                downloadTasks[name] = nil
+                activeDownloads[name] = nil
+                speedSamples[name] = nil
+                endBackgroundTask(for: name)
+            }
+            // swift-huggingface's download loop throws on network errors
+            // without retrying; a flaky connection would fail the whole
+            // download. Retry a bounded number of times with backoff.
             let maxAttempts = 3
             for attempt in 1...maxAttempts {
                 do {
                     _ = try await load(model: model)
+                    notifyDownloadComplete(name: name)
                     return
                 } catch {
-                    // 用户主动取消时不再重试、也不报错。
-                    if error is CancellationError || Task.isCancelled {
-                        return
-                    }
+                    // User-initiated cancellation: no retry, no error report.
+                    if error is CancellationError || Task.isCancelled { return }
                     if attempt == maxAttempts {
-                        self.downloadError = error.localizedDescription
+                        downloadErrors[name] = error.localizedDescription
                         return
                     }
-                    try? await Task.sleep(
-                        nanoseconds: UInt64(attempt) * 1_000_000_000)
+                    try? await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)
                 }
             }
         }
     }
 
-    /// Cancels the in-flight download, if any.
+    /// Cancels the in-flight download of a model, if any.
     @MainActor
-    func cancelDownload() {
-        downloadTask?.cancel()
-        downloadTask = nil
-        modelDownloadProgress?.cancel()
-        modelDownloadProgress = nil
-        downloadingModelName = nil
-        downloadError = nil
+    func cancelDownload(of model: LMModel) {
+        downloadTasks[model.name]?.cancel()
+        downloadTasks[model.name] = nil
+        activeDownloads[model.name] = nil
+        speedSamples[model.name] = nil
+        downloadErrors[model.name] = nil
     }
+
+    /// Whether a model is currently downloading (or loading into memory).
+    @MainActor
+    func isDownloading(_ model: LMModel) -> Bool {
+        activeDownloads[model.name] != nil
+    }
+
+    @MainActor
+    private func endBackgroundTask(for name: String) {
+        if let id = backgroundTaskIDs[name], id != .invalid {
+            UIApplication.shared.endBackgroundTask(id)
+        }
+        backgroundTaskIDs[name] = nil
+    }
+
+    /// Local notification fired when a download completes while the app is
+    /// not frontmost, so the user knows the model is ready.
+    @MainActor
+    private func notifyDownloadComplete(name: String) {
+        guard UIApplication.shared.applicationState != .active else { return }
+        Notify.post(
+            "模型下载完成",
+            "\(name) 已下载完毕，随时可以开始对话。"
+        )
+    }
+
+    // MARK: - Generation
 
     /// Generates text based on the provided messages using the specified model.
     /// - Parameters:
@@ -249,6 +393,39 @@ class MLXService {
         }
     }
 
+    // MARK: - Memory pressure
+
+    /// Evicts every loaded model from memory. Called on memory warnings: the
+    /// multi-GB footprint drops to a few MB, which drastically improves the
+    /// app's odds of surviving in the background (jetsam kills by footprint).
+    /// Sessions reload their model from local disk on next use.
+    @MainActor
+    func evictModelsForMemoryPressure() {
+        guard !loadedModelNames.isEmpty else { return }
+        let evicted = loadedModelNames.sorted()
+        loadedModelNames.removeAll()
+        modelCache.removeAllObjects()
+        Memory.clearCache()
+        Notify.post(
+            "已卸载模型以保持后台",
+            "内存紧张，已释放 \(evicted.joined(separator: "、"))。回到对话时会自动重新加载。"
+        )
+    }
+
+    /// Clamps the MLX buffer cache while backgrounded so the resident
+    /// footprint stays small (see mlx-swift's running-on-ios guidance).
+    @MainActor
+    func setBackgrounded(_ backgrounded: Bool) {
+        if backgrounded {
+            Memory.cacheLimit = 256 * 1024 * 1024
+        } else {
+            let physicalMemory = ProcessInfo.processInfo.physicalMemory
+            let quarter = physicalMemory / 4
+            Memory.cacheLimit = Int(
+                min(max(quarter, UInt64(512 * 1024 * 1024)), UInt64(4 * 1024 * 1024 * 1024)))
+        }
+    }
+
     // MARK: - Download management
 
     /// Local directory a model downloads into, following the Hugging Face hub cache layout
@@ -261,21 +438,28 @@ class MLXService {
 
     /// Whether the model's files have been fully downloaded to disk.
     ///
-    /// swift-huggingface writes a snapshot metadata file under
-    /// `.metadata/models--<org>--<name>/` only after every file of the snapshot
-    /// has finished downloading. During an in-progress download the `blobs/`
-    /// and `snapshots/` directories already exist and grow, so those cannot be
-    /// used to decide completion — the metadata file is the reliable marker.
+    /// The hub library only writes its `.metadata` bookkeeping when the
+    /// revision is a 40-hex commit hash — the app resolves "main", so that
+    /// directory never appears and cannot be used as a completion marker.
+    /// Instead we look for any `*.safetensors` entry inside
+    /// `snapshots/<commit>/`: the library creates those (symlinks into
+    /// `blobs/`) only after each file has fully landed, so a partial
+    /// download correctly reports "not downloaded".
     @MainActor
     func isDownloaded(_ model: LMModel) -> Bool {
-        let repo = model.configuration.name.replacingOccurrences(of: "/", with: "--")
-        let metadataDir = HubApi.downloadBaseURL
-            .appending(path: ".metadata")
-            .appending(path: "models--\(repo)")
+        let snapshotsDir = Self.downloadDirectory(for: model).appending(path: "snapshots")
+        let commits =
+            (try? FileManager.default.contentsOfDirectory(atPath: snapshotsDir.path)) ?? []
 
-        let contents =
-            (try? FileManager.default.contentsOfDirectory(atPath: metadataDir.path)) ?? []
-        return !contents.isEmpty
+        for commit in commits {
+            let files =
+                (try? FileManager.default.contentsOfDirectory(
+                    atPath: snapshotsDir.appending(path: commit).path)) ?? []
+            if files.contains(where: { $0.hasSuffix(".safetensors") }) {
+                return true
+            }
+        }
+        return false
     }
 
     /// Total size on disk of a downloaded model, computed off the main actor.
@@ -307,6 +491,7 @@ class MLXService {
     @MainActor
     func deleteDownloaded(_ model: LMModel) throws {
         modelCache.removeObject(forKey: model.name as NSString)
+        loadedModelNames.remove(model.name)
         try FileManager.default.removeItem(at: Self.downloadDirectory(for: model))
     }
 }

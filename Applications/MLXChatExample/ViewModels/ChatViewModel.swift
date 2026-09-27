@@ -7,6 +7,7 @@
 
 import Foundation
 import MLXLMCommon
+import UIKit
 import UniformTypeIdentifiers
 
 /// ViewModel that manages the chat interface and coordinates with MLXService for text generation.
@@ -82,8 +83,12 @@ class ChatViewModel {
             ?? MLXService.availableModels.first!
     }
 
-    /// 总结是否进行中（用于展示等待动画）。
-    var isSummarizing = false
+    /// Whether this conversation is currently being summarized. Backed by the
+    /// global store so the state survives leaving and re-entering the chat
+    /// (each entry creates a new view model).
+    var isSummarizing: Bool {
+        store.summarizingSessionIDs.contains(session.id)
+    }
 
     /// Indicates if text generation is in progress
     var isGenerating = false
@@ -97,11 +102,6 @@ class ChatViewModel {
     /// Current generation speed in tokens per second
     var tokensPerSecond: Double {
         generateCompletionInfo?.tokensPerSecond ?? 0
-    }
-
-    /// Progress of the current model download, if any
-    var modelDownloadProgress: Progress? {
-        mlxService.modelDownloadProgress
     }
 
     /// Most recent error message, if any
@@ -135,6 +135,13 @@ class ChatViewModel {
         store.save(session)
 
         generateTask = Task {
+            // Ask for ~30s of background execution so an in-flight reply keeps
+            // streaming briefly after the app is backgrounded.
+            let bgID = UIApplication.shared.beginBackgroundTask(withName: "generation")
+            defer {
+                if bgID != .invalid { UIApplication.shared.endBackgroundTask(bgID) }
+            }
+
             // Process generation chunks and update UI
             for await generation in try await mlxService.generate(
                 messages: messages, model: selectedModel,
@@ -256,9 +263,18 @@ class ChatViewModel {
 
     /// 将历史对话浓缩为摘要，替换为「人设 + 摘要 + 最近 2 条」，
     /// 最大限度保留记忆的同时压缩上下文占用。
+    ///
+    /// The in-flight flag lives on the shared store, so navigating away (or
+    /// the app being backgrounded — a background task keeps it running for
+    /// ~30s) does not lose the state; re-entering the conversation still
+    /// shows the progress indicator until the summary lands.
     func summarizeConversation() async {
-        isSummarizing = true
-        defer { isSummarizing = false }
+        store.summarizingSessionIDs.insert(session.id)
+        let bgID = UIApplication.shared.beginBackgroundTask(withName: "summarize")
+        defer {
+            store.summarizingSessionIDs.remove(session.id)
+            if bgID != .invalid { UIApplication.shared.endBackgroundTask(bgID) }
+        }
 
         let nonSystem = session.messages.filter { $0.role != .system }
         guard !nonSystem.isEmpty else { return }
