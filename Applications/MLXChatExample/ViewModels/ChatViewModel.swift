@@ -31,6 +31,8 @@ class ChatViewModel {
         self.selectedModel =
             MLXService.availableModels.first { $0.name == session.modelName }
             ?? MLXService.availableModels.first!
+        self.thinkingEnabled =
+            UserDefaults.standard.object(forKey: "thinkingEnabled") as? Bool ?? true
     }
 
     /// Current user input text
@@ -51,6 +53,14 @@ class ChatViewModel {
 
     /// Manages image and video attachments for the current message
     var mediaSelection = MediaSelection()
+
+    /// Thinking mode for models supporting the /think soft switch.
+    /// Toggled from the input bar; persisted via UserDefaults.
+    var thinkingEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(thinkingEnabled, forKey: "thinkingEnabled")
+        }
+    }
 
     /// Indicates if text generation is in progress
     var isGenerating = false
@@ -105,12 +115,9 @@ class ChatViewModel {
             // Process generation chunks and update UI
             for await generation in try await mlxService.generate(
                 messages: messages, model: selectedModel,
-                thinkingEnabled: selectedModel.supportsThinking
-                    ? (UserDefaults.standard.object(
-                        forKey: "thinkingEnabled") as? Bool ?? true)
-                    : nil,
+                thinkingEnabled: selectedModel.supportsThinking ? thinkingEnabled : nil,
                 kvBits: (UserDefaults.standard.object(
-                    forKey: "kvCacheQuantized") as? Bool ?? false) ? 8 : nil
+                    forKey: "kvCacheQuantized") as? Bool ?? true) ? 8 : nil
             )
             {
                 switch generation {

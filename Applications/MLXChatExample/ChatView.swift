@@ -78,7 +78,10 @@ struct ChatView: View {
                         mediaButtonAction: vm.selectedModel.isVisionModel
                             ? {
                                 vm.mediaSelection.isShowing = true
-                            } : nil
+                            } : nil,
+                        // Thinking toggle only for /think-capable models
+                        thinkingEnabled: vm.selectedModel.supportsThinking
+                            ? $vm.thinkingEnabled : nil
                     )
                     .padding(.horizontal, 12)
                     .padding(.bottom, 6)

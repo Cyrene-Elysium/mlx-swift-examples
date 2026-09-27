@@ -73,6 +73,12 @@ struct ModelManagerView: View {
         .refreshable {
             await refreshDownloadedSizes()
         }
+        .onChange(of: MLXService.shared.downloadingModelName) { _, newValue in
+            // Refresh the downloaded list once a download finishes or is cancelled.
+            if newValue == nil {
+                Task { await refreshDownloadedSizes() }
+            }
+        }
         .confirmationDialog(
             "删除已下载的模型？",
             isPresented: $showsDeleteConfirmation,
@@ -122,40 +128,76 @@ struct ModelManagerView: View {
     // MARK: - Rows
 
     private func modelRow(_ model: LMModel) -> some View {
-        Button {
-            store.defaultModelName = model.name
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: model.isVisionModel ? "eye" : "character.textbox")
-                    .font(.title3)
-                    .foregroundStyle(.tint)
-                    .frame(width: 28)
+        HStack(spacing: 12) {
+            Button {
+                store.defaultModelName = model.name
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: model.isVisionModel ? "eye" : "character.textbox")
+                        .font(.title3)
+                        .foregroundStyle(.tint)
+                        .frame(width: 28)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(model.displayName)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(model.displayName)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
 
-                    Text(statusLine(for: model))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        Text(statusLine(for: model))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    if store.defaultModelName == model.name {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.tint)
+                    }
                 }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
 
-                Spacer()
-
-                if store.defaultModelName == model.name {
-                    Image(systemName: "checkmark.circle.fill")
+            // Download / cancel control
+            if isDownloading(model) {
+                Button {
+                    MLXService.shared.cancelDownload()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+            } else if downloadedSizes[model.name] == nil {
+                Button {
+                    MLXService.shared.downloadModel(model)
+                } label: {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.title3)
                         .foregroundStyle(.tint)
                 }
+                .buttonStyle(.plain)
             }
-            .padding(.vertical, 2)
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 2)
+    }
+
+    private func isDownloading(_ model: LMModel) -> Bool {
+        MLXService.shared.downloadingModelName == model.name
     }
 
     // MARK: - Helpers
 
     private func statusLine(for model: LMModel) -> String {
+        if isDownloading(model) {
+            if let progress = MLXService.shared.modelDownloadProgress,
+                progress.totalUnitCount > 0
+            {
+                return "下载中 · \(Int(progress.fractionCompleted * 100))%"
+            }
+            return "下载中…"
+        }
         if let size = downloadedSizes[model.name] {
             "已下载 · "
                 + ByteCountFormatter.string(fromByteCount: size, countStyle: .file)

@@ -10,13 +10,10 @@ struct SettingsView: View {
     /// Shared session store, used to sync persona changes into the Chisato
     /// conversation's system prompt.
     let store: ChatSessionStore
-    /// Whether thinking mode is enabled for models supporting the soft switch.
-    @State private var thinkingEnabled =
-        UserDefaults.standard.object(forKey: "thinkingEnabled") as? Bool ?? true
 
     /// Whether the KV cache is quantized to 8-bit.
     @State private var kvCacheQuantized =
-        UserDefaults.standard.object(forKey: "kvCacheQuantized") as? Bool ?? false
+        UserDefaults.standard.object(forKey: "kvCacheQuantized") as? Bool ?? true
 
     /// Persona draft being edited.
     @State private var personaDraft = ""
@@ -24,18 +21,6 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("生成选项") {
-                Toggle(isOn: $thinkingEnabled) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("思考模式")
-                        Text("对 Qwen3 系列生效：关闭后在消息末尾附加 /no_think，让模型直接回答")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .onChange(of: thinkingEnabled) { _, newValue in
-                    UserDefaults.standard.set(newValue, forKey: "thinkingEnabled")
-                }
-
                 Toggle(isOn: $kvCacheQuantized) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("KV 缓存量化")

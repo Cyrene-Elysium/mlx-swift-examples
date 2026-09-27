@@ -46,6 +46,14 @@ class MLXService {
     @MainActor
     private(set) var modelDownloadProgress: Progress?
 
+    /// Name of the model currently downloading, if any.
+    @MainActor
+    private(set) var downloadingModelName: String?
+
+    /// In-flight download task, kept so the model manager can cancel it.
+    @MainActor
+    private var downloadTask: Task<Void, Error>?
+
     /// Loads a model from the hub or retrieves it from cache.
     /// - Parameter model: The model configuration to load
     /// - Returns: A ModelContainer instance containing the loaded model
@@ -101,6 +109,31 @@ class MLXService {
 
             return container
         }
+    }
+
+    /// Starts downloading (and pre-loading) a model, reporting progress via
+    /// `modelDownloadProgress`. Used by the model manager's download button.
+    @MainActor
+    func downloadModel(_ model: LMModel) {
+        downloadTask?.cancel()
+        downloadingModelName = model.name
+        downloadTask = Task {
+            defer {
+                downloadingModelName = nil
+                downloadTask = nil
+            }
+            _ = try await load(model: model)
+        }
+    }
+
+    /// Cancels the in-flight download, if any.
+    @MainActor
+    func cancelDownload() {
+        downloadTask?.cancel()
+        downloadTask = nil
+        modelDownloadProgress?.cancel()
+        modelDownloadProgress = nil
+        downloadingModelName = nil
     }
 
     /// Generates text based on the provided messages using the specified model.
