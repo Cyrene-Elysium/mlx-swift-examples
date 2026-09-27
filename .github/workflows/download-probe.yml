@@ -1,0 +1,52 @@
+name: Download Probe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [probe/download-stall]
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: macos-26
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Resolve probe package
+        run: |
+          cd probe
+          swift package resolve
+
+      - name: Run download probe (Qwen3-4B-4bit snapshot)
+        run: |
+          cd probe
+          set -o pipefail
+          swift run -c release probe 2>&1 | tee probe-output.log
+          echo "PROBE_EXIT=$?" >> "$GITHUB_ENV"
+
+      - name: Commit probe log back to branch
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add probe/probe-output.log || true
+          git commit -m "probe results (run ${{ github.run_id }})" || echo "nothing to commit"
+          git push || echo "push failed"
+
+      - name: Upload probe log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-output
+          path: probe/probe-output.log
+          if-no-files-found: warn
