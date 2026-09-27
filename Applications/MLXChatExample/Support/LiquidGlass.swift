@@ -43,12 +43,17 @@ extension View {
 /// Button style that renders a glass capsule/rounded surface and animates a
 /// bright press highlight scaled from the touch point. Used where a real
 /// button needs an unmistakable HDR-style bloom.
+///
+/// Note: this style deliberately does **not** install a `contentShape`. Doing
+/// so makes the whole surface claim every touch, which swallows the horizontal
+/// drag that `List` uses for `swipeActions` — cards rendered with this style
+/// became impossible to swipe-delete. Callers that need a precise hit area add
+/// their own `contentShape` inside the label instead.
 struct GlassPressButtonStyle: ButtonStyle {
     var shape: AnyShape = AnyShape(.capsule)
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .contentShape(shape)
             .glassEffect(
                 .regular.interactive(),
                 in: shape

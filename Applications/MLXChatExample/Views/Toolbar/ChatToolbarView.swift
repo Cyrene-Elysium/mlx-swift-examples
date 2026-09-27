@@ -8,9 +8,10 @@
 import SwiftUI
 
 /// Toolbar content for the chat interface: error indicator, download
-/// progress for the selected model, a "more" menu (compress / clear), and a
-/// live memory readout. Model selection and the thinking toggle live in the
-/// prompt bar's leading menu; generation-related defaults live in Settings.
+/// progress for the selected model, and the two conversation-level actions —
+/// compressing the context and clearing the history — kept as separate
+/// buttons. The live memory readout lives beside the remaining-context figure
+/// above the prompt bar (see `MemoryReadout`).
 ///
 /// `ToolbarContent` bodies are not main-actor isolated, so every conditional
 /// lives inside a small subview (whose `body` is).
@@ -27,11 +28,11 @@ struct ChatToolbarView: ToolbarContent {
         }
 
         ToolbarItem(placement: .primaryAction) {
-            ChatToolbarMemoryReadout()
+            ChatToolbarSummarizeButton(vm: vm)
         }
 
         ToolbarItem(placement: .primaryAction) {
-            ChatToolbarMoreMenu(vm: vm)
+            ChatToolbarClearButton(vm: vm)
         }
     }
 }
@@ -58,64 +59,39 @@ private struct ChatToolbarDownloadItem: View {
     }
 }
 
-/// Live resident-memory readout, refreshed every two seconds. Shows the
-/// kernel's physical footprint — the figure the system jetsams on — in a
-/// compact, secondary style so it reads as instrumentation, not a control.
-private struct ChatToolbarMemoryReadout: View {
-    @State private var bytes: Int64 = 0
-
-    /// Two-second cadence for the readout.
-    private let timer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+/// Compresses the conversation into a summary, freeing context. Disabled
+/// while a summarisation is already running.
+private struct ChatToolbarSummarizeButton: View {
+    @Bindable var vm: ChatViewModel
 
     var body: some View {
-        Text(formatted)
-            .font(.caption2.monospacedDigit())
-            .foregroundStyle(.secondary)
-            .onAppear { refresh() }
-            .onReceive(timer) { _ in refresh() }
-    }
-
-    private func refresh() {
-        bytes = MLXService.residentMemoryBytes()
-    }
-
-    private var formatted: String {
-        guard bytes > 0 else { return "—" }
-        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .memory)
+        Button {
+            Task { await vm.summarizeConversation() }
+        } label: {
+            Label("压缩上下文", systemImage: "rectangle.compress.vertical")
+        }
+        .disabled(vm.isSummarizing)
     }
 }
 
-/// Overflow menu holding the conversation-level actions (compress context,
-/// clear history) that used to occupy their own toolbar buttons.
-private struct ChatToolbarMoreMenu: View {
+/// Clears the current conversation, after a confirmation.
+private struct ChatToolbarClearButton: View {
     @Bindable var vm: ChatViewModel
 
     @State private var showsClearConfirmation = false
 
     var body: some View {
-        Menu {
-            Button {
-                Task { await vm.summarizeConversation() }
-            } label: {
-                Label("压缩上下文", systemImage: "rectangle.compress.vertical")
-            }
-            .disabled(vm.isSummarizing)
-
-            Button(role: .destructive) {
-                showsClearConfirmation = true
-            } label: {
-                Label("清空对话", systemImage: "trash")
-            }
+        Button(role: .destructive) {
+            showsClearConfirmation = true
         } label: {
-            Image(systemName: "ellipsis.circle")
-                .foregroundStyle(.tint)
+            Label("删除对话", systemImage: "trash")
         }
         .confirmationDialog(
-            "清空当前对话？",
+            "删除当前对话？",
             isPresented: $showsClearConfirmation,
             titleVisibility: .visible
         ) {
-            Button("清空", role: .destructive) {
+            Button("删除", role: .destructive) {
                 vm.clear([.chat, .meta])
             }
             Button("取消", role: .cancel) {}

@@ -11,24 +11,40 @@ import SwiftUI
 /// menu: downloaded models first, then the rest, each group sorted by name
 /// then size.
 ///
-/// The two markers are deliberately distinct so they can't be confused:
+/// Built from plain `Button`s rather than a `Picker`. A `Picker` in a menu
+/// always draws its selection checkmark at the *leading* edge of the row, so
+/// pairing it with a "downloaded" bullet produced a cluttered
+/// `✓ ● Name` prefix on the selected row while every other row was `● Name` —
+/// the two markers collided and nothing lined up. Drawing both markers by
+/// hand keeps them on opposite sides:
 /// * a small filled dot *before* the name means "downloaded to this device";
-/// * the system checkmark *after* the name means "currently selected"
-///   (rendered by `Picker` for the selected row).
+/// * a checkmark *after* the name means "currently selected".
 struct ModelPickerMenu: View {
     @Bindable var vm: ChatViewModel
 
-    /// Names of models already downloaded, used to mark them in the picker.
+    /// Names of models already downloaded, used to mark them in the list.
     @State private var downloadedNames: Set<String> = []
 
     var body: some View {
-        Picker("模型", selection: $vm.selectedModel) {
-            ForEach(sortedModels) { model in
-                downloadedNames.contains(model.name)
-                    ? Text(
-                        "● \(pickerLabel(for: model))"
-                    ).tag(model)
-                    : Text(pickerLabel(for: model)).tag(model)
+        ForEach(sortedModels) { model in
+            Button {
+                vm.selectedModel = model
+            } label: {
+                HStack(spacing: 6) {
+                    if downloadedNames.contains(model.name) {
+                        Image(systemName: "circle.fill")
+                            .font(.system(size: 6))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text(label(for: model))
+
+                    if model.id == vm.selectedModel.id {
+                        Spacer(minLength: 8)
+                        Image(systemName: "checkmark")
+                            .font(.footnote.weight(.semibold))
+                    }
+                }
             }
         }
         .task {
@@ -52,9 +68,9 @@ struct ModelPickerMenu: View {
         return downloaded + rest
     }
 
-    /// 模型选择器的显示文字：名称 + 类型标注。已下载标识由调用方在名称前
-    /// 用圆点表达，选中标识由 Picker 在名称右侧画对勾——两者互不干扰。
-    private func pickerLabel(for model: LMModel) -> String {
+    /// 模型显示文字：名称 + 类型标注。两个标记分别由圆点（前）和对勾（后）
+    /// 表达，互不干扰。
+    private func label(for model: LMModel) -> String {
         let kind = model.isVisionModel ? "视觉" : "文本"
         return "\(model.displayName)（\(kind)）"
     }

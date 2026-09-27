@@ -114,13 +114,16 @@ struct MessageView: View {
                 // Reasoning trace gets its own collapsible box so the answer
                 // below reads clean. Auto-expands while it streams, auto-
                 // collapses once the answer starts (unless the user disabled
-                // live expansion in Settings).
-                if !message.thinking.isEmpty {
+                // live expansion in Settings). Only rendered when there is
+                // real reasoning to show — a model that answers straight away
+                // must not get an empty "推理完成" bar.
+                if message.hasThinkingTrace {
                     ThinkingBox(message: message, liveExpansion: liveThinkingExpansion)
                 }
 
                 // LocalizedStringKey used to trigger default handling of markdown content.
                 Text(LocalizedStringKey(message.content))
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
 
                 // Per-reply generation speed.
@@ -130,9 +133,11 @@ struct MessageView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer()
+            Spacer(minLength: 0)
         }
+        .padding(.trailing, 8)
     }
 
     private var systemMessage: some View {
@@ -176,7 +181,7 @@ struct ThinkingBox: View {
     @State private var manualExpanded: Bool?
 
     private var isStreaming: Bool {
-        !message.thinkingFinished && !message.thinking.isEmpty
+        !message.thinkingFinished && message.hasThinkingTrace
     }
 
     /// Auto state: expanded while thinking (if allowed), collapsed after.
@@ -196,8 +201,10 @@ struct ThinkingBox: View {
                 }
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: isStreaming ? "brain" : "brain.fill")
+                    Image(systemName: isStreaming ? "sparkles" : "sparkles")
                         .font(.caption)
+                        .foregroundStyle(isStreaming ? Color.accentColor : .secondary)
+                        .symbolEffect(.variableColor.iterative, isActive: isStreaming)
                     Text(statusText)
                         .font(.caption.weight(.medium))
                     Spacer(minLength: 0)
@@ -210,7 +217,7 @@ struct ThinkingBox: View {
             }
             .buttonStyle(.plain)
 
-            if isExpanded && !message.thinking.isEmpty {
+            if isExpanded && message.hasThinkingTrace {
                 Divider().padding(.vertical, 6)
                 Text(message.thinking)
                     .font(.caption)
@@ -226,7 +233,7 @@ struct ThinkingBox: View {
     }
 
     private var statusText: String {
-        if isStreaming { return "正在思考" }
-        return "思考完成"
+        if isStreaming { return "正在推理" }
+        return "推理完成"
     }
 }

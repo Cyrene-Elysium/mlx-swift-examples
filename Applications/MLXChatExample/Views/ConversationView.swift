@@ -23,7 +23,7 @@ struct ConversationView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: 14) {
                 // System prompts (persona / assistant instructions) are internal
                 // and must never be rendered in the conversation.
                 ForEach(messages.filter { $0.role != .system }) { message in
@@ -34,8 +34,12 @@ struct ConversationView: View {
                     .padding(.horizontal, 12)
                 }
             }
+            // Padding lives inside the scroll content so the first and last
+            // messages keep breathing room instead of being clipped against
+            // the navigation bar and the prompt bar.
+            .padding(.top, 12)
+            .padding(.bottom, 10)
         }
-        .padding(.vertical, 8)
         .defaultScrollAnchor(.bottom, for: .sizeChanges)
     }
 }

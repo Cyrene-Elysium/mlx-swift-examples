@@ -33,39 +33,65 @@ struct PromptField: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            // Row above the bar: leading glass control menu, trailing plain
-            // context readout. Deliberately outside the capsule so the bar
-            // itself stays a clean input strip.
+            // Row above the bar: leading glass control menu, then the
+            // reasoning toggle, with the plain context/memory readouts
+            // trailing. Deliberately outside the capsule so the bar itself
+            // stays a clean input strip.
             HStack(spacing: 8) {
                 Menu {
-                    Section {
-                        ModelPickerMenu(vm: vm)
-                    }
-
-                    if vm.selectedModel.supportsThinking {
-                        Section {
-                            Toggle("推理模式", isOn: $vm.thinkingEnabled)
-                        }
-                    }
+                    // No `Section` wrapper: a Section in a menu draws its own
+                    // separator with an inset that does not line up with the
+                    // item text, which made the divider look misaligned.
+                    ModelPickerMenu(vm: vm)
                 } label: {
-                    Image(systemName: "slider.horizontal.2")
-                        .font(.subheadline)
-                        .foregroundStyle(.tint)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
+                    // The glyph must stay legible on top of the frosted glass:
+                    // a plain `.tint` fill lost all contrast against the dark
+                    // background and the button read as an empty pill.
+                    Image(systemName: "square.stack.3d.up")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
                 }
                 .buttonStyle(.plain)
                 .contentShape(Capsule())
                 .glassEffect(.regular.interactive(), in: .capsule)
 
+                // Reasoning toggle as its own glass button — three stars, lit
+                // when enabled. Only meaningful for models that reason.
+                if vm.selectedModel.supportsThinking {
+                    Button {
+                        vm.thinkingEnabled.toggle()
+                    } label: {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(vm.thinkingEnabled ? Color.accentColor : .primary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Capsule())
+                    .glassEffect(
+                        vm.thinkingEnabled
+                            ? .regular.tint(.accentColor).interactive()
+                            : .regular.interactive(),
+                        in: .capsule)
+                    .accessibilityLabel("推理模式")
+                }
+
                 Spacer(minLength: 0)
 
-                // Grey, chrome-free readout. Recomputed only when a reply
-                // finishes (see ChatViewModel.settledRemainingTokens), not on
-                // every streamed chunk.
-                Text("剩余上下文 · 约 \(vm.settledRemainingTokens) token")
-                    .font(.caption2.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                // Grey, chrome-free readouts. The context figure recomputes
+                // only when a reply finishes (see
+                // ChatViewModel.settledRemainingTokens); the memory figure
+                // refreshes on its own two-second cadence.
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text("剩余上下文 · 约 \(vm.settledRemainingTokens) token")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+
+                    MemoryReadout()
+                }
             }
             .padding(.horizontal, 4)
 
@@ -131,6 +157,34 @@ struct PromptField: View {
 
     private func removeTask() {
         task = nil
+    }
+}
+
+/// Live resident-memory readout, refreshed every two seconds. Shows the
+/// kernel's physical footprint — the figure the system jetsams on — in a
+/// compact, secondary style so it reads as instrumentation, not a control.
+/// Lives beside the remaining-context figure above the prompt bar.
+struct MemoryReadout: View {
+    @State private var bytes: Int64 = 0
+
+    /// Two-second cadence for the readout.
+    private let timer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        Text(formatted)
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.tertiary)
+            .onAppear { refresh() }
+            .onReceive(timer) { _ in refresh() }
+    }
+
+    private func refresh() {
+        bytes = MLXService.residentMemoryBytes()
+    }
+
+    private var formatted: String {
+        guard bytes > 0 else { return "—" }
+        return "内存 " + ByteCountFormatter.string(fromByteCount: bytes, countStyle: .memory)
     }
 }
 

@@ -60,13 +60,15 @@ struct SessionListView: View {
                 path.append(store.chisatoSession())
             } label: {
                 ChisatoEntryCard()
+                    .contentShape(
+                        ConcentricRectangle(
+                            corners: .concentric(minimum: 28), isUniform: true))
             }
             .buttonStyle(
                 GlassPressButtonStyle(
                     shape: AnyShape(
                         ConcentricRectangle(
                             corners: .concentric(minimum: 28), isUniform: true))))
-            .contentShape(Rectangle())
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
             .listRowInsets(
@@ -75,8 +77,17 @@ struct SessionListView: View {
             // The dedicated Chisato conversation lives behind the pinned card
             // above and is deliberately hidden from this list.
             ForEach(store.sessions.filter { !$0.isChisato && !$0.isEmpty }) { session in
+                // Note: keep the row a plain `NavigationLink` so `List` keeps
+                // owning the row interaction. A custom `ButtonStyle` here
+                // (as used before) replaced the standard row behaviour and
+                // made `swipeActions` unreachable — the glass is applied to
+                // the label's own background instead.
                 NavigationLink(value: session) {
                     SessionRowView(session: session)
+                        .glassEffect(
+                            .regular.interactive(),
+                            in: ConcentricRectangle(
+                                corners: .concentric(minimum: 28), isUniform: true))
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button(role: .destructive) {
@@ -85,11 +96,6 @@ struct SessionListView: View {
                         Label("删除", systemImage: "trash")
                     }
                 }
-                .buttonStyle(
-                    GlassPressButtonStyle(
-                        shape: AnyShape(
-                            ConcentricRectangle(
-                                corners: .concentric(minimum: 28), isUniform: true))))
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
                 .listRowInsets(

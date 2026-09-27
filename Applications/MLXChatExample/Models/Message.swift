@@ -37,6 +37,14 @@ class Message: Identifiable {
     /// reply reasons at all. Prevents re-checking the opener on every chunk.
     var thinkingDecided: Bool = false
 
+    /// Whether there is an actual reasoning trace worth showing. Whitespace-
+    /// only traces (which a model can emit for an empty `<think>` block) do
+    /// not count, so the collapsible box is never rendered as an empty
+    /// "推理完成" bar.
+    var hasThinkingTrace: Bool {
+        !thinking.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     /// Array of image URLs attached to the message
     var images: [URL]
 
