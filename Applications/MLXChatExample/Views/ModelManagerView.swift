@@ -25,6 +25,10 @@ struct ModelManagerView: View {
     /// Error message shown when deletion fails.
     @State private var errorMessage: String?
 
+    /// Download progress fraction for the in-flight download, sampled from the
+    /// on-disk byte count (more reliable than the hub's Progress object).
+    @State private var downloadFraction: Double = 0
+
     /// Models that have already been downloaded to this device.
     private var downloadedModels: [LMModel] {
         MLXService.availableModels.filter { downloadedSizes[$0.name] != nil }
@@ -69,6 +73,20 @@ struct ModelManagerView: View {
         .navigationTitle("模型")
         .task {
             await refreshDownloadedSizes()
+            // Continuously sample the download progress from on-disk bytes.
+            while !Task.isCancelled {
+                if let name = MLXService.shared.downloadingModelName,
+                    let model = MLXService.availableModels.first(where: {
+                        $0.name == name
+                    }),
+                    let total = model.estimatedSizeBytes
+                {
+                    let dir = MLXService.downloadDirectory(for: model)
+                    let bytes = await MLXService.directorySize(at: dir)
+                    downloadFraction = min(Double(bytes) / Double(total), 1.0)
+                }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
         }
         .refreshable {
             await refreshDownloadedSizes()
@@ -145,16 +163,31 @@ struct ModelManagerView: View {
 
             Spacer()
 
-            // Download / cancel control
+            // Download control (App Store style), right-aligned near the edge
             if isDownloading(model) {
-                Button {
-                    MLXService.shared.cancelDownload()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(.red)
+                HStack(spacing: 8) {
+                    ZStack {
+                        Circle()
+                            .stroke(.quaternary, lineWidth: 2)
+                        Circle()
+                            .trim(from: 0, to: max(downloadFraction, 0.03))
+                            .stroke(
+                                Color.accentColor,
+                                style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                            .animation(.linear(duration: 0.3), value: downloadFraction)
+                    }
+                    .frame(width: 24, height: 24)
+
+                    Button {
+                        MLXService.shared.cancelDownload()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             } else if downloadedSizes[model.name] == nil {
                 Button {
                     MLXService.shared.downloadModel(model)

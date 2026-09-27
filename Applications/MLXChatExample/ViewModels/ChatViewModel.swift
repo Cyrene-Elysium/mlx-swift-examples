@@ -62,6 +62,13 @@ class ChatViewModel {
         }
     }
 
+    /// 剩余上下文的粗略估算（token 数）。用字符数折半近似，仅供提示，
+    /// 标注「约」使用。
+    var remainingTokens: Int {
+        let used = session.messages.reduce(0) { $0 + $1.content.count / 2 }
+        return max(selectedModel.contextLength - used, 0)
+    }
+
     /// Indicates if text generation is in progress
     var isGenerating = false
 
@@ -221,6 +228,13 @@ class ChatViewModel {
         } else {
             session.messages.insert(.system(persona), at: 0)
         }
+        store.save(session)
+    }
+
+    /// 删除单条消息并持久化。删掉的消息会自动从后续请求的上下文中消失，
+    /// 因为每次生成都以 `session.messages` 为准重新发给模型。
+    func deleteMessage(_ message: Message) {
+        session.messages.removeAll { $0.id == message.id }
         store.save(session)
     }
 }

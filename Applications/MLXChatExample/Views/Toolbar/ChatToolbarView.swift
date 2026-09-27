@@ -24,8 +24,13 @@ struct ChatToolbarView: View {
         }
 
         // Show download progress for model loading
-        if let progress = vm.modelDownloadProgress, !progress.isFinished {
-            DownloadProgressView(progress: progress)
+        if let progress = vm.modelDownloadProgress, !progress.isFinished,
+            let name = MLXService.shared.downloadingModelName,
+            let model = MLXService.availableModels.first(where: { $0.name == name })
+        {
+            DownloadProgressView(
+                directory: MLXService.downloadDirectory(for: model),
+                totalBytes: model.estimatedSizeBytes ?? progress.totalUnitCount)
         }
 
         // Clear chat history (explicit, with confirmation)

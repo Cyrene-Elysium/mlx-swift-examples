@@ -15,14 +15,18 @@ struct ConversationView: View {
     /// Whether this is the dedicated Chisato conversation (shows her avatar).
     let isChisato: Bool
 
+    /// Called when the user deletes a single message.
+    var onDelete: ((Message) -> Void)?
+
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
                 // System prompts (persona / assistant instructions) are internal
                 // and must never be rendered in the conversation.
                 ForEach(messages.filter { $0.role != .system }) { message in
-                    MessageView(message, showsChisatoAvatar: isChisato)
-                        .padding(.horizontal, 12)
+                    MessageView(
+                        message, showsChisatoAvatar: isChisato, onDelete: onDelete)
+                    .padding(.horizontal, 12)
                 }
             }
         }

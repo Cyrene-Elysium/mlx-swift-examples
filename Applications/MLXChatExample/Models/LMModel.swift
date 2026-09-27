@@ -51,6 +51,21 @@ extension LMModel {
         }
     }
 
+    /// Maximum context window in tokens (from the model's
+    /// `max_position_embeddings`), used to display remaining context.
+    var contextLength: Int {
+        switch name {
+        case "qwen3:4b": 40_960
+        case "qwen3.5:2b": 262_144
+        case "glm4:9b": 32_768
+        case "mimo:7b": 32_768
+        case "lfm2:8b": 128_000
+        case "gemma4:E4B": 131_072
+        case "gemma4:E2B": 131_072
+        default: 32_768
+        }
+    }
+
     /// Whether the model is a large language model
     var isLanguageModel: Bool {
         type == .llm

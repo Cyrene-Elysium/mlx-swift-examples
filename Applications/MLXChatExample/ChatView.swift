@@ -65,7 +65,10 @@ struct ChatView: View {
     var body: some View {
         // Display conversation history; the prompt bar floats above it so
         // content scrolls beneath the Liquid Glass material.
-        ConversationView(messages: vm.messages, isChisato: vm.session.isChisato)
+        ConversationView(
+            messages: vm.messages, isChisato: vm.session.isChisato,
+            onDelete: vm.deleteMessage
+        )
             .contentShape(Rectangle())
             .onTapGesture {
                 // Tap anywhere on the conversation to dismiss the keyboard.
@@ -77,6 +80,11 @@ struct ChatView: View {
                     if !vm.mediaSelection.isEmpty {
                         MediaPreviewsView(mediaSelection: vm.mediaSelection)
                     }
+
+                    // Remaining context hint
+                    Text("剩余上下文 · 约 \(vm.remainingTokens) token")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
 
                     // Input field with send and media attachment buttons
                     PromptField(
