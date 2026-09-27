@@ -109,6 +109,15 @@ class ChatViewModel {
         store.summarizingSessionIDs.contains(session.id)
     }
 
+    /// KV-cache quantization to request for the selected model, honoring the
+    /// user's preference but forcing it off for models whose cache must stay
+    /// unquantized (see `LMModel.supportsKVCacheQuantization`).
+    private var kvBitsForSelectedModel: Int? {
+        guard selectedModel.supportsKVCacheQuantization else { return nil }
+        let enabled = UserDefaults.standard.object(forKey: "kvCacheQuantized") as? Bool ?? true
+        return enabled ? 8 : nil
+    }
+
     /// Indicates if text generation is in progress
     var isGenerating = false
 
@@ -180,8 +189,7 @@ class ChatViewModel {
             for await generation in try await mlxService.generate(
                 messages: messages, model: selectedModel,
                 thinkingEnabled: selectedModel.supportsThinking ? thinkingEnabled : nil,
-                kvBits: (UserDefaults.standard.object(
-                    forKey: "kvCacheQuantized") as? Bool ?? true) ? 8 : nil
+                kvBits: kvBitsForSelectedModel
             )
             {
                 switch generation {
@@ -224,6 +232,20 @@ class ChatViewModel {
             }
         } catch {
             errorMessage = error.localizedDescription
+        }
+
+        // A reply that produced neither text nor an error must not look like
+        // "nothing happened" — that silence is indistinguishable from a hung
+        // UI. Surface it so the failing model can be identified on device.
+        if let assistantMessage = session.messages.last,
+            assistantMessage.role == .assistant,
+            assistantMessage.content.isEmpty,
+            assistantMessage.thinking.isEmpty,
+            errorMessage == nil
+        {
+            errorMessage =
+                "「\(selectedModel.name)」没有产生任何输出（既无正文也无推理内容）。"
+                + "请把这条提示反馈给开发者以便定位。"
         }
 
         isGenerating = false

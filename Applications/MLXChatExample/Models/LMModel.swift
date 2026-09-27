@@ -89,6 +89,19 @@ extension LMModel {
     var supportsThinking: Bool {
         name.hasPrefix("qwen3")
     }
+
+    /// Whether the KV cache may be quantized for this model.
+    ///
+    /// Gemma 4 shares one KV head (`num_key_value_heads = 1`, `head_dim = 256`)
+    /// across a long KV-shared tail — 20 of 35 layers on E2B. Quantizing a
+    /// single-head cache that then has to be reused by that many shared layers
+    /// is the one structural difference between the Gemma 4 variants and every
+    /// other model here, and it lines up with E2B producing no output at all
+    /// while E4B (fewer shared layers) still works. Keep these models on an
+    /// unquantized cache until the failure is confirmed fixed on device.
+    var supportsKVCacheQuantization: Bool {
+        !name.hasPrefix("gemma4")
+    }
 }
 
 extension LMModel: Identifiable, Hashable {
