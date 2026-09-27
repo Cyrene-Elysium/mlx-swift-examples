@@ -119,7 +119,7 @@ struct ChisatoEntryCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .contentShape(Rectangle())
-        .liquidGlassBackground(in: .rect(cornerRadius: 20))
+        .interactiveGlassBackground(in: .rect(cornerRadius: 20))
     }
 }
 
@@ -150,7 +150,7 @@ struct SessionRowView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .liquidGlassBackground(in: .rect(cornerRadius: 20))
+        .interactiveGlassBackground(in: .rect(cornerRadius: 20))
     }
 }
 

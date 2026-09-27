@@ -16,4 +16,21 @@ extension View {
     func liquidGlassBackground(in shape: some Shape = .rect(cornerRadius: 24)) -> some View {
         glassEffect(in: shape)
     }
+
+    /// Interactive Liquid Glass: same material, but with the system's
+    /// press highlight that blooms outward from the touch point — the
+    /// effect used by Apple's own apps for tappable glass cards.
+    func interactiveGlassBackground(in shape: some Shape = .rect(cornerRadius: 24)) -> some View {
+        glassEffect(.regular.interactive(), in: shape)
+    }
+
+    /// Interactive Liquid Glass whose corner curvature follows the device's
+    /// container (screen) corner radius via `ConcentricRectangle`, so the
+    /// capsule visually parallels the physical screen edge. Used by the
+    /// prompt bar, which spans the width of the screen.
+    func concentricInteractiveGlassBackground() -> some View {
+        glassEffect(
+            .regular.interactive(),
+            in: ConcentricRectangle(corners: .containerConcentric, isUniform: true))
+    }
 }

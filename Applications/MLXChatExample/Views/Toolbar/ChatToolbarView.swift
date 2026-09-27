@@ -8,10 +8,9 @@
 import SwiftUI
 
 /// Toolbar content for the chat interface: error indicator, download
-/// progress for the selected model, clear-conversation, and model selection —
-/// each as its own item so they sit as separate buttons. Generation-related
-/// toggles (thinking mode, KV-cache quantization) live in Settings to keep
-/// this bar uncluttered.
+/// progress for the selected model, summarize-context, and clear-conversation.
+/// Model selection and the thinking toggle moved into the prompt bar's
+/// control menu; generation-related defaults live in Settings.
 ///
 /// `ToolbarContent` bodies are not main-actor isolated, so every conditional
 /// lives inside a small subview (whose `body` is).
@@ -28,11 +27,11 @@ struct ChatToolbarView: ToolbarContent {
         }
 
         ToolbarItem(placement: .primaryAction) {
-            ChatToolbarClearButton(vm: vm)
+            ChatToolbarSummarizeButton(vm: vm)
         }
 
         ToolbarItem(placement: .primaryAction) {
-            ChatToolbarModelPicker(vm: vm)
+            ChatToolbarClearButton(vm: vm)
         }
     }
 }
@@ -59,6 +58,21 @@ private struct ChatToolbarDownloadItem: View {
     }
 }
 
+/// Summarize (compress) the conversation context on demand.
+private struct ChatToolbarSummarizeButton: View {
+    @Bindable var vm: ChatViewModel
+
+    var body: some View {
+        Button {
+            Task { await vm.summarizeConversation() }
+        } label: {
+            Image(systemName: "rectangle.compress.vertical")
+                .foregroundStyle(.tint)
+        }
+        .disabled(vm.isSummarizing)
+    }
+}
+
 /// Clear chat history (explicit, with confirmation), as its own toolbar item.
 private struct ChatToolbarClearButton: View {
     @Bindable var vm: ChatViewModel
@@ -82,58 +96,5 @@ private struct ChatToolbarClearButton: View {
             }
             Button("取消", role: .cancel) {}
         }
-    }
-}
-
-/// Model selection picker: downloaded models first (marked with ✓), then the
-/// rest, each group sorted by name then size.
-private struct ChatToolbarModelPicker: View {
-    @Bindable var vm: ChatViewModel
-
-    /// Names of models already downloaded, used to mark them in the picker.
-    @State private var downloadedNames: Set<String> = []
-
-    var body: some View {
-        Picker("模型", selection: $vm.selectedModel) {
-            ForEach(sortedModels) { model in
-                Text(pickerLabel(for: model))
-                    .tag(model)
-            }
-        }
-        .task {
-            await refreshDownloadedNames()
-        }
-        .onChange(of: MLXService.shared.activeDownloads) { old, new in
-            if old.count > new.count {
-                Task { await refreshDownloadedNames() }
-            }
-        }
-    }
-
-    /// 已下载在前（组内 名称 → 体积），未下载在后（同序）。
-    private var sortedModels: [LMModel] {
-        let downloaded = MLXService.availableModels
-            .filter { downloadedNames.contains($0.name) }
-            .sorted { LMModel.listSort($0, $1) }
-        let rest = MLXService.availableModels
-            .filter { !downloadedNames.contains($0.name) }
-            .sorted { LMModel.listSort($0, $1) }
-        return downloaded + rest
-    }
-
-    /// 模型选择器的显示文字：类型标注 + 已下载打勾。
-    private func pickerLabel(for model: LMModel) -> String {
-        let kind = model.isVisionModel ? "视觉" : "文本"
-        let check = downloadedNames.contains(model.name) ? " ✓" : ""
-        return "\(model.displayName)（\(kind)）\(check)"
-    }
-
-    /// 查询已下载的模型名集合。
-    private func refreshDownloadedNames() async {
-        var names = Set<String>()
-        for model in MLXService.availableModels where MLXService.shared.isDownloaded(model) {
-            names.insert(model.name)
-        }
-        downloadedNames = names
     }
 }

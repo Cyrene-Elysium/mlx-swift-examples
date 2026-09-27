@@ -94,48 +94,14 @@ struct ChatView: View {
                         MediaPreviewsView(mediaSelection: vm.mediaSelection)
                     }
 
-                    // Thinking toggle + remaining context + summarize, above the input bar
-                    HStack(spacing: 14) {
-                        if vm.selectedModel.supportsThinking {
-                            Button {
-                                vm.thinkingEnabled.toggle()
-                            } label: {
-                                Image(systemName: "sparkles")
-                                    .font(.title3)
-                                    .foregroundStyle(
-                                        vm.thinkingEnabled
-                                            ? Color.accentColor : Color.secondary)
-                                    .frame(width: 44, height: 44)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.glass)
-                        }
-
-                        Spacer()
-
-                        Text("剩余上下文 · 约 \(vm.remainingTokens) token")
-                            .font(.caption2)
-                            .foregroundStyle(
-                                vm.isContextNearLimit ? Color.red : Color.secondary)
-
-                        Button {
-                            Task { await vm.summarizeConversation() }
-                        } label: {
-                            Image(systemName: "rectangle.compress.vertical")
-                                .font(.title3)
-                                .foregroundStyle(.tint)
-                                .frame(width: 44, height: 44)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.glass)
-                        .disabled(vm.isSummarizing)
-                    }
-                    .padding(.horizontal, 16)
-
-                    // Input field with send and media attachment buttons
+                    // Input field with send, media and control menu buttons.
+                    // The thinking toggle, model selection and the remaining-
+                    // context readout live inside the bar's control menu;
+                    // summarize moved to the top toolbar.
                     PromptField(
                         prompt: $vm.prompt,
                         isInputFocused: $isInputFocused,
+                        vm: vm,
                         sendButtonAction: sendOrPrompt,
                         // Only show media button for vision-capable models
                         mediaButtonAction: vm.selectedModel.isVisionModel

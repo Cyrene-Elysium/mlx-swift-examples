@@ -9,7 +9,12 @@ import SwiftUI
 
 /// Floating prompt input bar rendered with the Liquid Glass material.
 /// The glass background lets conversation content refract through as it
-/// scrolls beneath the bar.
+/// scrolls beneath the bar, and follows the device's screen corner
+/// curvature (`ConcentricRectangle`) with an interactive press highlight.
+///
+/// The leading control menu holds what used to sit in the top toolbar and
+/// the strip above the bar: model selection, the thinking toggle, and the
+/// remaining-context readout.
 struct PromptField: View {
     @Binding var prompt: String
     @State private var task: Task<Void, Never>?
@@ -18,11 +23,42 @@ struct PromptField: View {
     /// keyboard (on send, or when the conversation is tapped).
     var isInputFocused: FocusState<Bool>.Binding
 
+    /// View model providing the model selection, thinking toggle and
+    /// context readout surfaced in the control menu.
+    @Bindable var vm: ChatViewModel
+
     let sendButtonAction: () async -> Void
     let mediaButtonAction: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 12) {
+            // Control menu: model selection (submenu), thinking mode, and
+            // the remaining-context readout — all tucked into the bar.
+            Menu {
+                Section {
+                    ModelPickerMenu(vm: vm)
+                }
+
+                if vm.selectedModel.supportsThinking {
+                    Section {
+                        Toggle("思考模式", isOn: $vm.thinkingEnabled)
+                    }
+                }
+
+                Section {
+                    Label(
+                        "剩余上下文 · 约 \(vm.remainingTokens) token",
+                        systemImage: "chart.bar.doc.horizontal"
+                    )
+                    .foregroundStyle(.secondary)
+                }
+            } label: {
+                Image(systemName: "slider.horizontal.2")
+                    .font(.title3)
+                    .foregroundStyle(.tint)
+            }
+            .buttonStyle(.glass)
+
             if let mediaButtonAction {
                 Button(action: mediaButtonAction) {
                     Image(systemName: "photo.badge.plus")
@@ -66,7 +102,7 @@ struct PromptField: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .liquidGlassBackground(in: .rect(cornerRadius: 24))
+        .concentricInteractiveGlassBackground()
     }
 
     /// Whether the prompt has content worth sending (enables the send button).
@@ -93,7 +129,16 @@ private struct PromptFieldPreview: View {
     var body: some View {
         VStack {
             Spacer()
-            PromptField(prompt: .constant(""), isInputFocused: $focused) {
+            PromptField(
+                prompt: .constant(""),
+                isInputFocused: $focused,
+                vm: ChatViewModel(
+                    mlxService: MLXService(),
+                    session: ChatSession(
+                        modelName: MLXService.availableModels.first!.name,
+                        messages: [.system("hi")]),
+                    store: ChatSessionStore())
+            ) {
             } mediaButtonAction: {
             }
             .padding(.horizontal, 12)

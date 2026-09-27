@@ -9,21 +9,24 @@ import SwiftUI
 
 /// 统一的模型类型图标：文本模型显示「文」，视觉模型显示眼睛图标。
 /// 模型管理页用它表达类型，取代原来的「文本模型 / 视觉模型」文字注释。
+/// SF Symbol 与汉字的光学尺寸不同（symbol 有内建留白，汉字满框），
+/// 两者钉在不同的字号上让视觉高度一致。
 struct ModelIcon: View {
     let model: LMModel
 
     var body: some View {
-        if model.isVisionModel {
-            Image(systemName: "eye")
-                .font(.title3)
-                .foregroundStyle(.tint)
-                .frame(width: 28)
-        } else {
-            Text("文")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.tint)
-                .frame(width: 28)
+        ZStack {
+            if model.isVisionModel {
+                Image(systemName: "eye")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(.tint)
+            } else {
+                Text("文")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.tint)
+            }
         }
+        .frame(width: 28, height: 28)
     }
 }
 
@@ -249,6 +252,9 @@ struct ModelManagerView: View {
             value: MLXService.shared.activeDownloads[model.name] != nil
         )
         .padding(.vertical, 2)
+        // Align every row's separator with the text column so the dividers
+        // form one straight line instead of following each row's content.
+        .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] + 40 }
     }
 
     // MARK: - Helpers
