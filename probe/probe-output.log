@@ -1,0 +1,103 @@
+Building for production...
+[0/8] Copying PrivacyInfo.xcprivacy
+[0/8] Write sources
+[5/8] Write swift-version-7974D3F7F03D5E95.txt
+[7/10] Compiling Crypto AES-GCM.swift
+[8/10] Compiling EventSource AsyncEventsSequence.swift
+[9/11] Compiling HuggingFace AccessRequest.swift
+[10/12] Compiling probe main.swift
+/Users/runner/work/mlx-swift-examples/mlx-swift-examples/probe/Sources/probe/main.swift:115:81: error: extra argument 'flush' in call
+113 |     try? await Task.sleep(nanoseconds: 8 * 60 * 1_000_000_000)
+114 |     let dt = Date().timeIntervalSince(start)
+115 |     print("WATCHDOG: no completion after \(dt)s — treating as stall.", flush: true)
+    |                                                                               `- error: extra argument 'flush' in call
+116 |     forensicDump(reason: "watchdog")
+117 |     exit(2)
+
+/Users/runner/work/mlx-swift-examples/mlx-swift-examples/probe/Sources/probe/main.swift:24:22: error: extra argument 'flush' in call
+ 22 | func forensicDump(reason: String) {
+ 23 |     let fm = FileManager.default
+ 24 |     print("", flush: true)
+    |                      `- error: extra argument 'flush' in call
+ 25 |     print("=== FORENSIC DUMP (\(reason)) ===", flush: true)
+ 26 |     for sub in ["blobs", "snapshots"] {
+
+/Users/runner/work/mlx-swift-examples/mlx-swift-examples/probe/Sources/probe/main.swift:25:55: error: extra argument 'flush' in call
+ 23 |     let fm = FileManager.default
+ 24 |     print("", flush: true)
+ 25 |     print("=== FORENSIC DUMP (\(reason)) ===", flush: true)
+    |                                                       `- error: extra argument 'flush' in call
+ 26 |     for sub in ["blobs", "snapshots"] {
+ 27 |         let dir = repoDir.appending(path: sub)
+
+/Users/runner/work/mlx-swift-examples/mlx-swift-examples/probe/Sources/probe/main.swift:29:48: error: extra argument 'flush' in call
+ 27 |         let dir = repoDir.appending(path: sub)
+ 28 |         guard let entries = try? fm.contentsOfDirectory(atPath: dir.path) else {
+ 29 |             print("\(sub)/: <missing>", flush: true)
+    |                                                `- error: extra argument 'flush' in call
+ 30 |             continue
+ 31 |         }
+
+/Users/runner/work/mlx-swift-examples/mlx-swift-examples/probe/Sources/probe/main.swift:42:90: error: extra argument 'flush' in call
+ 40 |                     return (attrs?[.size] as? NSNumber)?.int64Value
+ 41 |                 }.reduce(0, +)
+ 42 |                 print("\(sub)/\(entry)/ -> \(files.count) files, \(total) bytes", flush: true)
+    |                                                                                          `- error: extra argument 'flush' in call
+ 43 |                 for f in files {
+ 44 |                     let fp = path.appending(path: f)
+
+/Users/runner/work/mlx-swift-examples/mlx-swift-examples/probe/Sources/probe/main.swift:47:61: error: extra argument 'flush' in call
+ 45 |                     let attrs = try? fm.attributesOfItem(atPath: fp.path)
+ 46 |                     let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
+ 47 |                     print("    \(f)  \(size) bytes", flush: true)
+    |                                                             `- error: extra argument 'flush' in call
+ 48 |                 }
+ 49 |             } else {
+
+/Users/runner/work/mlx-swift-examples/mlx-swift-examples/probe/Sources/probe/main.swift:52:64: error: extra argument 'flush' in call
+ 50 |                 let attrs = try? fm.attributesOfItem(atPath: path.path)
+ 51 |                 let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
+ 52 |                 print("\(sub)/\(entry)  \(size) bytes", flush: true)
+    |                                                                `- error: extra argument 'flush' in call
+ 53 |             }
+ 54 |         }
+
+/Users/runner/work/mlx-swift-examples/mlx-swift-examples/probe/Sources/probe/main.swift:64:54: error: extra argument 'flush' in call
+ 62 |             let attrs = try? fm.attributesOfItem(atPath: tmpDir.appending(path: t).path)
+ 63 |             let size = (attrs?[.size] as? NSNumber)?.int64Value ?? 0
+ 64 |             print("TMP  \(t)  \(size) bytes", flush: true)
+    |                                                      `- error: extra argument 'flush' in call
+ 65 |         }
+ 66 |     }
+
+/Users/runner/work/mlx-swift-examples/mlx-swift-examples/probe/Sources/probe/main.swift:71:69: error: extra argument 'flush' in call
+ 69 | func run() async {
+ 70 |     let client = HubClient(cache: HubCache(cacheDirectory: cacheDir))
+ 71 |     print("probe start \(repoName), cache \(cacheDir.path)", flush: true)
+    |                                                                     `- error: extra argument 'flush' in call
+ 72 | 
+ 73 |     do {
+
+/Users/runner/work/mlx-swift-examples/mlx-swift-examples/probe/Sources/probe/main.swift:94:28: error: extra argument 'flush' in call
+ 92 |                         format: "[%7.2fs] %12d / %12d  (%5.2f%%)  %7.2f MB/s", dt, bytes, total,
+ 93 |                         progress.fractionCompleted * 100, inst),
+ 94 |                     flush: true)
+    |                            `- error: extra argument 'flush' in call
+ 95 |             }
+ 96 |         }
+
+/Users/runner/work/mlx-swift-examples/mlx-swift-examples/probe/Sources/probe/main.swift:98:75: error: extra argument 'flush' in call
+ 96 |         }
+ 97 |         let dt = Date().timeIntervalSince(start)
+ 98 |         print(String(format: "DONE in %.1fs -> %@", dt, url.path), flush: true)
+    |                                                                           `- error: extra argument 'flush' in call
+ 99 |         forensicDump(reason: "success")
+100 |         exit(0)
+
+/Users/runner/work/mlx-swift-examples/mlx-swift-examples/probe/Sources/probe/main.swift:103:54: error: extra argument 'flush' in call
+101 |     } catch {
+102 |         let dt = Date().timeIntervalSince(start)
+103 |         print("ERROR after \(dt)s: \(error)", flush: true)
+    |                                                      `- error: extra argument 'flush' in call
+104 |         forensicDump(reason: "error")
+105 |         exit(1)
