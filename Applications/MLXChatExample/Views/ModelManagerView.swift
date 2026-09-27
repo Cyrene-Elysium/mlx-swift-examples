@@ -199,12 +199,12 @@ struct ModelManagerView: View {
             return "下载中…"
         }
         if let size = downloadedSizes[model.name] {
-            "已下载 · "
+            return "已下载 · "
                 + ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
         } else if model.isVisionModel {
-            "视觉模型 · 未下载"
+            return "视觉模型 · 未下载"
         } else {
-            "文本模型 · 未下载"
+            return "文本模型 · 未下载"
         }
     }
 
