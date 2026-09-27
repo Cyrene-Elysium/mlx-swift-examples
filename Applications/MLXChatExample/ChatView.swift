@@ -48,6 +48,9 @@ struct ChatView: View {
     /// View model that manages the chat state and business logic
     @Bindable private var vm: ChatViewModel
 
+    /// Focus state for the input field, used to dismiss the keyboard.
+    @FocusState private var isInputFocused: Bool
+
     #if os(iOS)
         /// Selected items from PhotosPicker
         @State private var photosPickerItems: [PhotosPickerItem] = []
@@ -63,6 +66,11 @@ struct ChatView: View {
         // Display conversation history; the prompt bar floats above it so
         // content scrolls beneath the Liquid Glass material.
         ConversationView(messages: vm.messages, isChisato: vm.session.isChisato)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                // Tap anywhere on the conversation to dismiss the keyboard.
+                isInputFocused = false
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 VStack(spacing: 8) {
                     // Show media previews if attachments are present
@@ -73,6 +81,7 @@ struct ChatView: View {
                     // Input field with send and media attachment buttons
                     PromptField(
                         prompt: $vm.prompt,
+                        isInputFocused: $isInputFocused,
                         sendButtonAction: vm.generate,
                         // Only show media button for vision-capable models
                         mediaButtonAction: vm.selectedModel.isVisionModel

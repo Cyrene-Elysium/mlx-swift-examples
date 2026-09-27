@@ -36,7 +36,7 @@ struct SettingsView: View {
 
             Section("千束的人设与记忆") {
                 TextEditor(text: $personaDraft)
-                    .frame(minHeight: 240)
+                    .frame(height: 240)
             }
 
             Section {
@@ -55,7 +55,6 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("设置")
-        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             personaDraft = ChisatoProfile.shared.persona
         }

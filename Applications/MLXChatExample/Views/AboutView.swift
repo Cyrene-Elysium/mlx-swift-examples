@@ -43,7 +43,6 @@ struct AboutView: View {
             .padding()
         }
         .navigationTitle("关于千束")
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

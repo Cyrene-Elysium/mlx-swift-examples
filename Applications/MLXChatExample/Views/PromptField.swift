@@ -14,6 +14,10 @@ struct PromptField: View {
     @Binding var prompt: String
     @State private var task: Task<Void, Never>?
 
+    /// Focus binding for the text field, so the parent can dismiss the
+    /// keyboard (on send, or when the conversation is tapped).
+    var isInputFocused: FocusState<Bool>.Binding
+
     let sendButtonAction: () async -> Void
     let mediaButtonAction: (() -> Void)?
 
@@ -50,12 +54,14 @@ struct PromptField: View {
             TextField("输入消息", text: $prompt, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...5)
+                .focused(isInputFocused)
 
             Button {
                 if isRunning {
                     task?.cancel()
                     removeTask()
                 } else {
+                    isInputFocused.wrappedValue = false
                     task = Task {
                         await sendButtonAction()
                         removeTask()
@@ -84,13 +90,21 @@ struct PromptField: View {
 }
 
 #Preview {
-    VStack {
-        Spacer()
-        PromptField(prompt: .constant("")) {
-        } mediaButtonAction: {
+    PromptFieldPreview()
+}
+
+private struct PromptFieldPreview: View {
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack {
+            Spacer()
+            PromptField(prompt: .constant(""), isInputFocused: $focused) {
+            } mediaButtonAction: {
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
         }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
+        .background(Color.gray.opacity(0.3))
     }
-    .background(Color.gray.opacity(0.3))
 }

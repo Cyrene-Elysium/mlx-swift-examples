@@ -129,35 +129,21 @@ struct ModelManagerView: View {
 
     private func modelRow(_ model: LMModel) -> some View {
         HStack(spacing: 12) {
-            Button {
-                store.defaultModelName = model.name
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: model.isVisionModel ? "eye" : "character.textbox")
-                        .font(.title3)
-                        .foregroundStyle(.tint)
-                        .frame(width: 28)
+            Image(systemName: model.isVisionModel ? "eye" : "character.textbox")
+                .font(.title3)
+                .foregroundStyle(.tint)
+                .frame(width: 28)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(model.displayName)
-                            .font(.headline)
-                            .foregroundStyle(.primary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(model.displayName)
+                    .font(.headline)
 
-                        Text(statusLine(for: model))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    if store.defaultModelName == model.name {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.tint)
-                    }
-                }
-                .contentShape(Rectangle())
+                Text(statusLine(for: model))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.plain)
+
+            Spacer()
 
             // Download / cancel control
             if isDownloading(model) {
@@ -196,11 +182,15 @@ struct ModelManagerView: View {
         if let size = downloadedSizes[model.name] {
             return "已下载 · "
                 + ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
-        } else if model.isVisionModel {
-            return "视觉模型 · 未下载"
-        } else {
-            return "文本模型 · 未下载"
         }
+
+        let kind = model.isVisionModel ? "视觉模型" : "文本模型"
+        if let estimate = model.estimatedSizeBytes {
+            let size = ByteCountFormatter.string(
+                fromByteCount: estimate, countStyle: .file)
+            return "\(kind) · 未下载 · 约 \(size)"
+        }
+        return "\(kind) · 未下载"
     }
 
     private func refreshDownloadedSizes() async {

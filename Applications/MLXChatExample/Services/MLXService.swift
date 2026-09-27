@@ -235,26 +235,20 @@ class MLXService {
 
     /// Whether the model's files have been fully downloaded to disk.
     ///
-    /// A model is considered downloaded only once its `snapshots/` directory
-    /// exists and is non-empty. During an in-progress download the hub creates
-    /// `blobs/` and partial files but no snapshot yet, so merely checking the
-    /// `models--…` directory would incorrectly report it as downloaded.
+    /// swift-huggingface writes a snapshot metadata file under
+    /// `.metadata/models--<org>--<name>/` only after every file of the snapshot
+    /// has finished downloading. During an in-progress download the `blobs/`
+    /// and `snapshots/` directories already exist and grow, so those cannot be
+    /// used to decide completion — the metadata file is the reliable marker.
     @MainActor
     func isDownloaded(_ model: LMModel) -> Bool {
-        let snapshotsDir = Self.downloadDirectory(for: model)
-            .appending(path: "snapshots")
-
-        var isDir: ObjCBool = false
-        guard
-            FileManager.default.fileExists(
-                atPath: snapshotsDir.path, isDirectory: &isDir),
-            isDir.boolValue
-        else {
-            return false
-        }
+        let repo = model.configuration.name.replacingOccurrences(of: "/", with: "--")
+        let metadataDir = HubApi.downloadBaseURL
+            .appending(path: ".metadata")
+            .appending(path: "models--\(repo)")
 
         let contents =
-            (try? FileManager.default.contentsOfDirectory(atPath: snapshotsDir.path)) ?? []
+            (try? FileManager.default.contentsOfDirectory(atPath: metadataDir.path)) ?? []
         return !contents.isEmpty
     }
 

@@ -31,10 +31,24 @@ struct LMModel {
 // MARK: - Helpers
 
 extension LMModel {
-    /// Display name shown in the picker and model list. The vision/text type
-    /// is conveyed by the status line instead, so no suffix is added here.
+    /// Display name shown in the picker and model list, title-cased.
     var displayName: String {
-        name
+        name.prefix(1).uppercased() + name.dropFirst()
+    }
+
+    /// Estimated download size in bytes, shown for not-yet-downloaded models.
+    /// Derived from the MLX-community repository file sizes.
+    var estimatedSizeBytes: Int64? {
+        switch name {
+        case "qwen3:4b": 2_280_000_000
+        case "qwen3.5:2b": 1_750_000_000
+        case "glm4:9b": 5_310_000_000
+        case "mimo:7b": 4_300_000_000
+        case "lfm2:8b": 4_180_000_000
+        case "gemma4:E4B": 5_180_000_000
+        case "gemma4:E2B": 3_580_000_000
+        default: nil
+        }
     }
 
     /// Whether the model is a large language model
