@@ -12,8 +12,7 @@ struct ConversationView: View {
     /// Array of messages to display in the conversation
     let messages: [Message]
 
-    /// Whether this is the dedicated Chisato conversation (shows her avatar
-    /// and a faint portrait watermark; plain chats stay clean).
+    /// Whether this is the dedicated Chisato conversation (shows her avatar).
     let isChisato: Bool
 
     var body: some View {
@@ -29,19 +28,6 @@ struct ConversationView: View {
         }
         .padding(.vertical, 8)
         .defaultScrollAnchor(.bottom, for: .sizeChanges)
-        .background {
-            if isChisato {
-                // Faint Chisato watermark so the illustration stays present but
-                // never competes with the conversation text.
-                Image("Chisato")
-                    .resizable()
-                    .scaledToFit()
-                    .opacity(0.07)
-                    .padding(.top, 100)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    .ignoresSafeArea()
-            }
-        }
     }
 }
 

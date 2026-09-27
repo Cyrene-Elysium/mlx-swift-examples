@@ -8,73 +8,92 @@
 import SwiftUI
 
 /// Floating toolbar icon shown while a model downloads. Tapping it presents a
-/// popover with a live progress bar, downloaded/total bytes and transfer speed.
+/// sheet with a live progress bar, downloaded/total bytes and transfer speed.
+///
+/// The `Progress` object advances continuously but is not `Observable`, so the
+/// sheet samples it on a timer and renders the sampled values via its own
+/// `@State` (which reliably re-renders the sheet). A popover was tried before
+/// and did not refresh reliably.
 struct DownloadProgressView: View {
     let progress: Progress
 
-    @State private var isShowingDownload = false
+    @State private var isShowing = false
 
     var body: some View {
         Button {
-            isShowingDownload = true
+            isShowing = true
         } label: {
-            Image(systemName: "arrow.down.square")
+            Image(systemName: "arrow.down.circle.fill")
                 .foregroundStyle(.tint)
         }
-        .popover(isPresented: $isShowingDownload, arrowEdge: .bottom) {
-            DownloadProgressPopover(progress: progress)
+        .sheet(isPresented: $isShowing) {
+            DownloadProgressSheet(progress: progress)
         }
     }
 }
 
-/// The popover content. It owns the sampling `@State` and the timer task, so it
-/// refreshes itself as the `Progress` advances. Keeping the timer inside the
-/// presented view (rather than on the outer toolbar button) matters because a
-/// SwiftUI popover is an independent presentation that does not reliably
-/// re-render when only the presenting view's state changes.
-private struct DownloadProgressPopover: View {
+/// The sheet content, sampling `progress` on a timer.
+private struct DownloadProgressSheet: View {
     let progress: Progress
 
     @State private var sampledBytes: Int64 = 0
     @State private var bytesPerSecond: Double = 0
+    @Environment(\.dismiss) private var dismiss
 
     private let sampleInterval: UInt64 = 500_000_000  // 0.5 s
 
     var body: some View {
-        VStack(spacing: 10) {
-            Group {
-                if progress.totalUnitCount > 0 {
-                    ProgressView(value: progress.fractionCompleted)
-                } else {
-                    // Total size unknown yet - show an indeterminate bar.
-                    ProgressView()
+        NavigationStack {
+            VStack(spacing: 20) {
+                Spacer()
+
+                VStack(spacing: 12) {
+                    if progress.totalUnitCount > 0 {
+                        ProgressView(value: fraction)
+                    } else {
+                        ProgressView()
+                    }
+
+                    if progress.totalUnitCount > 0 {
+                        Text("\(Int(fraction * 100))%")
+                            .font(.system(.title2, design: .rounded).bold())
+                            .monospacedDigit()
+                    }
                 }
-            }
-            .frame(width: 240)
+                .frame(maxWidth: 280)
 
-            VStack(spacing: 4) {
-                Text(sizeText)
-                    .font(.subheadline.monospacedDigit())
+                VStack(spacing: 6) {
+                    Text(sizeText)
+                        .font(.subheadline.monospacedDigit())
 
-                if bytesPerSecond > 1_024 {
-                    Text(
-                        "速度 "
-                            + ByteCountFormatter.string(
-                                fromByteCount: Int64(bytesPerSecond),
-                                countStyle: .file
-                            ) + "/秒"
-                    )
+                    if bytesPerSecond > 1_024 {
+                        Text(
+                            "速度 "
+                                + ByteCountFormatter.string(
+                                    fromByteCount: Int64(bytesPerSecond),
+                                    countStyle: .file
+                                ) + "/秒"
+                        )
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+
+                Text("模型正在下载，完成后即可开始对话")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+
+                Spacer()
+            }
+            .padding()
+            .navigationTitle("下载中")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("关闭") { dismiss() }
                 }
             }
-
-            Text("模型正在下载，完成后即可开始对话")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 16)
         }
-        .padding()
         .task {
             var lastBytes = Int64(0)
             var lastDate = Date()
@@ -96,7 +115,11 @@ private struct DownloadProgressPopover: View {
         }
     }
 
-    /// "123 MB / 4.6 GB", or just the downloaded size when the total is unknown.
+    private var fraction: Double {
+        guard progress.totalUnitCount > 0 else { return 0 }
+        return Double(sampledBytes) / Double(progress.totalUnitCount)
+    }
+
     private var sizeText: String {
         let downloaded = ByteCountFormatter.string(
             fromByteCount: sampledBytes, countStyle: .file)

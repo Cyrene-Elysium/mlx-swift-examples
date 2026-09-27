@@ -19,6 +19,12 @@ struct SessionListView: View {
                 .navigationTitle("MLX Chat")
                 .toolbar {
                     ToolbarItemGroup(placement: .primaryAction) {
+                        Button {
+                            path.append(store.createSession())
+                        } label: {
+                            Label("新对话", systemImage: "square.and.pencil")
+                        }
+
                         NavigationLink {
                             ModelManagerView(store: store)
                         } label: {
@@ -37,20 +43,6 @@ struct SessionListView: View {
                             Label("关于", systemImage: "info.circle")
                         }
                     }
-                }
-                .overlay(alignment: .bottomTrailing) {
-                    // Floating new-chat button (plain liquid glass, no gradient)
-                    Button {
-                        path.append(store.createSession())
-                    } label: {
-                        Image(systemName: "square.and.pencil")
-                            .font(.title3)
-                            .foregroundStyle(.tint)
-                            .frame(width: 56, height: 56)
-                    }
-                    .buttonStyle(.plain)
-                    .liquidGlassBackground(in: .circle)
-                    .padding(24)
                 }
                 .navigationDestination(for: ChatSession.self) { session in
                     ChatView(

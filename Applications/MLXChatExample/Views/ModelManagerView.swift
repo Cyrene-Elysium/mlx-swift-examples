@@ -191,11 +191,6 @@ struct ModelManagerView: View {
 
     private func statusLine(for model: LMModel) -> String {
         if isDownloading(model) {
-            if let progress = MLXService.shared.modelDownloadProgress,
-                progress.totalUnitCount > 0
-            {
-                return "下载中 · \(Int(progress.fractionCompleted * 100))%"
-            }
             return "下载中…"
         }
         if let size = downloadedSizes[model.name] {

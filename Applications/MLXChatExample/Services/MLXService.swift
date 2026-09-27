@@ -233,11 +233,29 @@ class MLXService {
         return HubApi.downloadBaseURL.appending(path: "models--\(repo)")
     }
 
-    /// Whether the model's files have been downloaded to disk.
+    /// Whether the model's files have been fully downloaded to disk.
+    ///
+    /// A model is considered downloaded only once its `snapshots/` directory
+    /// exists and is non-empty. During an in-progress download the hub creates
+    /// `blobs/` and partial files but no snapshot yet, so merely checking the
+    /// `models--…` directory would incorrectly report it as downloaded.
     @MainActor
     func isDownloaded(_ model: LMModel) -> Bool {
-        FileManager.default.fileExists(
-            atPath: Self.downloadDirectory(for: model).path)
+        let snapshotsDir = Self.downloadDirectory(for: model)
+            .appending(path: "snapshots")
+
+        var isDir: ObjCBool = false
+        guard
+            FileManager.default.fileExists(
+                atPath: snapshotsDir.path, isDirectory: &isDir),
+            isDir.boolValue
+        else {
+            return false
+        }
+
+        let contents =
+            (try? FileManager.default.contentsOfDirectory(atPath: snapshotsDir.path)) ?? []
+        return !contents.isEmpty
     }
 
     /// Total size on disk of a downloaded model, computed off the main actor.
