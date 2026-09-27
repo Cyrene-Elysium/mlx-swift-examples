@@ -24,13 +24,15 @@ extension View {
         glassEffect(.regular.interactive(), in: shape)
     }
 
-    /// Interactive Liquid Glass whose corner curvature follows the device's
-    /// container (screen) corner radius via `ConcentricRectangle`, so the
-    /// capsule visually parallels the physical screen edge. Used by the
-    /// prompt bar, which spans the width of the screen.
+    /// Interactive Liquid Glass whose corners are concentric with the
+    /// device's screen curvature via `ConcentricRectangle`: each corner's
+    /// radius follows the container shape automatically — near the physical
+    /// screen edge it mirrors the device's corner radius — with a minimum
+    /// radius so corners never degenerate to square. Used by the prompt
+    /// bar, which spans the width of the screen.
     func concentricInteractiveGlassBackground() -> some View {
         glassEffect(
             .regular.interactive(),
-            in: ConcentricRectangle(corners: .containerConcentric, isUniform: true))
+            in: ConcentricRectangle(corners: .concentric(minimum: 20), isUniform: true))
     }
 }

@@ -40,7 +40,9 @@ class MLXService {
     ]
 
     /// Live state of a single model download, fed from the hub library's
-    /// byte-accurate `Progress` object (sampled every 100ms).
+    /// aggregate `Progress` (sampled every 100ms) — see
+    /// ``updateDownloadState(for:fallbackTotalBytes:progress:)`` for why
+    /// the fraction, not the byte counters, is the trusted signal.
     @MainActor
     struct DownloadState: Equatable {
         /// Fraction completed, 0...1.
@@ -169,7 +171,10 @@ class MLXService {
                 configuration: model.configuration
             ) { progress in
                 Task { @MainActor in
-                    Self.updateDownloadState(for: model.name, progress: progress)
+                    Self.updateDownloadState(
+                        for: model.name,
+                        fallbackTotalBytes: model.estimatedSizeBytes ?? 0,
+                        progress: progress)
                 }
             }
 
@@ -183,15 +188,39 @@ class MLXService {
         }
     }
 
-    /// Maps the hub library's byte-level `Progress` (delivered on the main
+    /// Maps the hub library's aggregate `Progress` (delivered on the main
     /// actor every 100ms) into the observable ``activeDownloads`` entry,
     /// including a lightly smoothed transfer speed.
+    ///
+    /// The upstream `Progress` is corrupt in two observable ways on large
+    /// snapshots (verified against swift-huggingface 0.11.0 with a macOS
+    /// probe downloading `mlx-community/Qwen3-4B-4bit`): while a multi-GB
+    /// file transfers, `completedUnitCount` freezes at the sum of the
+    /// already-completed small files (only jumping when each file lands),
+    /// and `totalUnitCount` goes negative (Int overflow). `fractionCompleted`,
+    /// however, aggregates the per-file child progresses and stays accurate
+    /// for the entire transfer. So the fraction is the primary signal;
+    /// bytes are derived from it against a trusted total — a positive
+    /// `totalUnitCount` when the library reports a sane one, else the
+    /// curated per-model size estimate — and the total is locked on the
+    /// first sample so the readout never jumps mid-download.
     @MainActor
-    private static func updateDownloadState(for name: String, progress: Progress) {
+    private static func updateDownloadState(
+        for name: String, fallbackTotalBytes: Int64, progress: Progress
+    ) {
         guard var state = shared.activeDownloads[name] else { return }
 
+        let fraction = min(max(progress.fractionCompleted, 0), 1)
+        if state.totalBytes == 0 {
+            state.totalBytes =
+                progress.totalUnitCount > 0
+                ? progress.totalUnitCount
+                : max(fallbackTotalBytes, 1)
+        }
+        let total = state.totalBytes
+        let completed = min(Int64((fraction * Double(total)).rounded(.up)), total)
+
         let now = Date()
-        let completed = progress.completedUnitCount
         if let last = shared.speedSamples[name] {
             let dt = now.timeIntervalSince(last.date)
             if dt > 0.05 {
@@ -205,11 +234,7 @@ class MLXService {
         shared.speedSamples[name] = (completed, now)
 
         state.completedBytes = completed
-        state.totalBytes = max(progress.totalUnitCount, 0)
-        state.fraction =
-            progress.totalUnitCount > 0
-            ? min(Double(completed) / Double(progress.totalUnitCount), 1.0)
-            : 0
+        state.fraction = fraction
         shared.activeDownloads[name] = state
     }
 
