@@ -366,49 +366,73 @@ class ChatViewModel {
     /// 普通尖括号 `<think>` / `</think>`，不是带特殊 Unicode 的形式）。
     /// 协议没有独立的 reasoning 通道（`Generation` 只有 `.chunk`），所以只能
     /// 对累积文本做切分：
-    /// - 文本以 `<think>` 开头 → 处于思考阶段，累积进 `thinking`；
-    /// - 见到 `</think>` → 思考结束，标记定型，后续进 `content`；
-    /// - 文本不以 `<think>` 开头（非思考模型，或 /no_think 直接作答）→
-    ///   立刻判定无思考内容，全部进 `content`。
+    /// - 缓冲文本仍是 `<think>` 的合法前缀（含空白）→ 暂不判定，等更多文本；
+    /// - 缓冲文本偏离 `<think>` → 无思考块（非思考模型，或 /no_think 直接作答），
+    ///   全部进 `content`；
+    /// - 缓冲文本凑满 `<think>` → 进入思考阶段，累积进 `thinking`；
+    /// - 见到 `</think>` → 思考结束，标记定型，其后进 `content`。
+    ///
+    /// 之所以要先缓冲再判定：流式 chunk 的边界是任意的，首个 chunk 可能只有
+    /// `<` 或 `<thi`，若直接判定会把真正的思考块误判成正文。
     private func route(chunk: String, into message: Message) {
-        // Already past the reasoning phase — everything is answer text.
+        // Past the reasoning phase — everything left is answer text.
         if message.thinkingFinished {
             message.content += chunk
             return
         }
 
-        // First chunk decides the mode: only a leading `<think>` opener puts
-        // us in the reasoning branch. Anything else is a normal answer.
+        // Undecided phase: buffer into `thinking`, then classify as soon as
+        // the buffer can be judged. A streaming chunk boundary is arbitrary,
+        // so the first chunk may be only `<` or `<thi` — judging on that
+        // partial prefix would misfile a real reasoning block as an answer.
         if !message.thinkingDecided {
-            message.thinkingDecided = true
-            let probe = chunk.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !probe.hasPrefix("<think>") {
+            message.thinking += chunk
+            let probe = message.thinking.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Diverges from the opener → no reasoning block at all; the whole
+            // buffer is answer text (non-thinking model, or /no_think).
+            if !Self.opener.hasPrefix(probe) {
+                message.thinkingDecided = true
                 message.thinkingFinished = true
-                message.content += chunk
+                message.content = message.thinking
+                message.thinking = ""
                 isThinking = false
                 return
             }
+
+            // Still a viable prefix (an empty/whitespace-only buffer is one
+            // too) — withhold judgement and wait for more text.
+            guard probe.count >= Self.opener.count else { return }
+
+            // Full opener matched: reasoning block confirmed. Drop the opener
+            // itself; the remainder (if any) stays buffered as reasoning.
+            message.thinkingDecided = true
+            if let openerRange = message.thinking.range(of: Self.opener) {
+                message.thinking.removeSubrange(openerRange)
+            }
+            isThinking = true
         }
 
-        // Accumulate raw text and look for the closing marker.
-        message.thinking += chunk
-
-        guard let range = message.thinking.range(of: "</think>") else {
-            // Still inside the reasoning block.
+        // Reasoning phase: look for the closing marker in the buffer.
+        guard let closeRange = message.thinking.range(of: Self.closer) else {
             isThinking = true
             return
         }
 
-        // Split at the marker: before → thinking, after → answer.
-        let reasoning = String(message.thinking[..<range.lowerBound])
-        let answer = String(message.thinking[range.upperBound...])
-        message.thinking = reasoning
-            .replacingOccurrences(of: "<think>", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // Split at the marker: before → reasoning, after → answer.
+        let reasoning = String(message.thinking[..<closeRange.lowerBound])
+        let answer = String(message.thinking[closeRange.upperBound...])
+        message.thinking = reasoning.trimmingCharacters(in: .whitespacesAndNewlines)
         message.content = answer
         message.thinkingFinished = true
         isThinking = false
     }
+
+    /// Reasoning opener/closer emitted by Qwen3's chat template. Measured from
+    /// `tokenizer_config.json`: plain angle brackets, not a special-Unicode
+    /// variant, and no separate reasoning channel in the generation protocol.
+    private static let opener = "<think>"
+    private static let closer = "</think>"
 
     /// 从最旧的非 system 消息开始丢弃，直到回到 80% 以内。
     /// 千束人设等 system 消息始终保留。
